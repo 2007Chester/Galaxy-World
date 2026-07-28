@@ -92,15 +92,15 @@ export const ITEM_COLORS = {
 
 /** Preferred tool + bare-hand multiplier (0–1). With preferred tool = 1.0 */
 export const GATHER_RULES = {
-  [ItemId.WOOD]: { tool: ItemId.AXE, bare: 0.35 },
-  [ItemId.CLAY]: { tool: ItemId.SHOVEL, bare: 0.35 },
+  [ItemId.WOOD]: { tool: ItemId.AXE, bare: 0.65 },
+  [ItemId.CLAY]: { tool: ItemId.SHOVEL, bare: 0.65 },
   [ItemId.STONE]: { tool: ItemId.PICKAXE, bare: 0.3 },
   [ItemId.IRON]: { tool: ItemId.PICKAXE, bare: 0.25 },
   [ItemId.COPPER]: { tool: ItemId.PICKAXE, bare: 0.25 },
   [ItemId.SILICON]: { tool: ItemId.PICKAXE, bare: 0.25 },
   [ItemId.ORGANIC]: { tool: ItemId.KNIFE, bare: 0.5 },
   [ItemId.FOOD]: { tool: ItemId.KNIFE, bare: 0.4 },
-  [ItemId.WATER]: { tool: ItemId.SHOVEL, bare: 0.45 },
+  [ItemId.WATER]: { tool: ItemId.SHOVEL, bare: 0.55 },
   [ItemId.SEEDS]: { tool: -1, bare: 1.0 },
   [ItemId.WRECK_PART]: { tool: -1, bare: 1.0 },
 };
