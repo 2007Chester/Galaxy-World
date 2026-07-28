@@ -62,6 +62,7 @@ export function createNewWorldSave({ name, seed } = {}) {
       0: {
         seed: homeSeed,
         harvested: [],
+        explored: [],
         buildings: [],
         ships: [],
       },

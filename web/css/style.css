@@ -615,6 +615,52 @@ html, body, #app {
   min-width: 240px;
 }
 
+.minimap-wrap {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 10px 10px;
+  width: 190px;
+  pointer-events: none;
+  z-index: 11;
+  background: rgba(4, 10, 18, 0.72);
+  border: 1px solid rgba(154, 215, 255, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.minimap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(126, 240, 212, 0.75);
+}
+
+#minimap-coords {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: rgba(200, 220, 240, 0.55);
+  font-size: 0.62rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+#minimap {
+  display: block;
+  width: 168px;
+  height: 168px;
+  border: 1px solid rgba(154, 215, 255, 0.16);
+  background: #050b12;
+  image-rendering: auto;
+}
+
 .bar-row {
   display: grid;
   grid-template-columns: 64px 1fr;
@@ -899,5 +945,16 @@ button.slot.active,
 
 @media (max-width: 800px) {
   .build-list { grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) {
+  .minimap-wrap {
+    top: auto;
+    bottom: 72px;
+    width: 150px;
+    padding: 6px 8px 8px;
+  }
+  #minimap {
+    width: 132px;
+    height: 132px;
+  }
   .bars { min-width: 180px; }
 }

@@ -24,6 +24,7 @@ import {
   loadSave,
   writeSave,
 } from "./save.js";
+import { Minimap } from "./minimap.js";
 import { UI } from "./ui.js";
 import { World } from "./world.js";
 
@@ -91,6 +92,7 @@ export class Game {
     this.world = null;
     this.player = null;
     this.preview = null;
+    this.minimap = new Minimap(document.getElementById("minimap"));
 
     this._bindUI();
     this.refreshMenu();
@@ -255,6 +257,7 @@ export class Game {
 
     this._bootPlanet(planet.seed ?? save.homeSeed, {
       harvested: continuePlay ? planet.harvested || [] : [],
+      explored: continuePlay ? planet.explored || [] : [],
       buildings: continuePlay ? planet.buildings || [] : [],
       ships: continuePlay ? planet.ships || [] : [],
       playerState: continuePlay ? save.player : null,
@@ -270,7 +273,7 @@ export class Game {
     this.refreshMenu();
   }
 
-  _bootPlanet(seed, { harvested = [], buildings = [], ships = [], playerState = null, showIntro = false } = {}) {
+  _bootPlanet(seed, { harvested = [], explored = [], buildings = [], ships = [], playerState = null, showIntro = false } = {}) {
     if (this.world) this.world.dispose();
     if (this.preview) {
       this.scene.remove(this.preview);
@@ -282,6 +285,8 @@ export class Game {
     this.world.setHarvested(harvested);
     this.world.build();
     this.world.restoreStructures({ buildings, ships });
+    this.minimap.reset(explored);
+    this.minimap.setVisible(true);
     this.particles = new ParticleBurst(this.scene);
 
     if (!this.player) {
@@ -336,7 +341,10 @@ export class Game {
     const planets = { ...(prev.planets || {}) };
 
     if (this.mode === "planet" && this.world?.serializePlanet) {
-      planets[String(this.planetIndex)] = this.world.serializePlanet();
+      planets[String(this.planetIndex)] = {
+        ...this.world.serializePlanet(),
+        explored: this.minimap.serialize(),
+      };
     }
 
     writeSave({
@@ -414,6 +422,17 @@ export class Game {
       mode: this.mode,
       planet: this.planetIndex,
     });
+
+    this.minimap.draw({
+      x: this.player.position.x,
+      z: this.player.position.z,
+      yaw: this.player.yaw,
+      seed: this.world.seed || this.homeSeed || 0,
+      buildings: this.world.buildings || [],
+      ships: this.world.ships || [],
+      mode: this.mode,
+    });
+
     this._applyCameraShake();
 
     if (this.player.isDead()) {
@@ -738,6 +757,7 @@ export class Game {
     this.player.flying = true;
     this.player.position.set(0, 5, 30);
     this.ui.showEva("Космос. Летите к планете (WASD/Space/Ctrl) и нажмите G или F для посадки.", 8);
+    this.minimap.setVisible(true);
     this.saveGame();
   }
 
@@ -770,11 +790,13 @@ export class Game {
     const planet = prev.planets?.[planetKey] || {
       seed,
       harvested: [],
+      explored: [],
       buildings: [],
       ships: [],
     };
     this._bootPlanet(seed, {
       harvested: planet.harvested || [],
+      explored: planet.explored || [],
       buildings: planet.buildings || [],
       ships: planet.ships || [],
       playerState: null,
