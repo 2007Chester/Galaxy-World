@@ -459,6 +459,7 @@ export class Game {
     if (this.mode === "planet") {
       this.world.updateChunks?.(this.player.position.x, this.player.position.z);
       this.world.updateDayNight?.(this.clock.elapsedTime);
+      this.world.updateAnimals?.(delta, this.player.position);
       this._applyBuildingBuffs(delta);
     } else {
       this._updateSpace(delta);
