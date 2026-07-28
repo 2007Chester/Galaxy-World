@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3 uid="uid://escapepod001"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_1"]
+radius = 1.2
+height = 3.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.75, 0.78, 0.85, 1)
+metallic = 0.6
+roughness = 0.4
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
+radius = 1.2
+height = 3.0
+
+[node name="EscapePod" type="StaticBody3D"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_1")
+
+[node name="SpawnPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 2)

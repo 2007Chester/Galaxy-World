@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="RecipeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/recipe_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+recipe_id = "metal_plate"
+display_name = "Metal Plate"
+output_id = 5
+output_amount = 1
+inputs = {
+1: 2
+}
