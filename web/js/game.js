@@ -1,12 +1,18 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import {
   BuildingId,
   CONST,
   EVA_MESSAGES,
+  ITEM_COLORS,
   ITEM_NAMES,
   RECIPES,
 } from "./constants.js";
+import { GameAudio } from "./audio.js";
 import { Crafting } from "./crafting.js";
+import { CameraShake, ParticleBurst } from "./effects.js";
 import { Inventory } from "./inventory.js";
 import { Player } from "./player.js";
 import { UI } from "./ui.js";
@@ -16,6 +22,7 @@ export class Game {
   constructor(canvas) {
     this.canvas = canvas;
     this.ui = new UI();
+    this.audio = new GameAudio();
     this.inventory = new Inventory();
     this.crafting = new Crafting(this.inventory);
     this.playing = false;
@@ -25,6 +32,9 @@ export class Game {
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
     this.mouse = { down: false };
+    this.shake = new CameraShake();
+    this.particles = null;
+    this.miningTarget = null;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -34,6 +44,10 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a1628);
@@ -45,6 +59,16 @@ export class Game {
       0.1,
       300
     );
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.35,
+      0.55,
+      0.82
+    );
+    this.composer.addPass(this.bloomPass);
 
     this.world = null;
     this.player = null;
@@ -83,12 +107,17 @@ export class Game {
     const seed = (Math.random() * 1e9) | 0;
     this.world = new World(this.scene, seed);
     this.world.build();
+    this.particles = new ParticleBurst(this.scene);
     this.player = new Player(this.camera, this.world);
     this.player.bindInput(this.canvas);
+    this.player.onFootstep = () => {
+      if (this.player.pointerLocked) this.audio.playFootstep();
+    };
     this.player.spawn();
     this.inventory.reset();
     this.triggers = { mine: false, craft: false, build: false };
     this.buildMode = false;
+    this.miningTarget = null;
     this.playing = true;
     this.ui.showGame();
     this.ui.toggleBuild(false);
@@ -96,22 +125,27 @@ export class Game {
     this.ui.toggleCraft(false);
     this.ui.updateInventory(this.inventory);
     this.ui.showEva(EVA_MESSAGES.start);
+    this.audio.startAmbience();
     this.canvas.requestPointerLock?.();
   }
 
   toMenu() {
     this.playing = false;
     this.buildMode = false;
+    this.miningTarget = null;
     document.exitPointerLock?.();
+    this.audio.stopAmbience();
     this.ui.showMenu();
   }
 
   update() {
     const delta = Math.min(this.clock.getDelta(), 0.05);
     this.ui.update(delta);
+    this.shake.update(delta);
+    this.particles?.update(delta);
 
     if (!this.playing || !this.player || !this.world) {
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render();
       return;
     }
 
@@ -120,6 +154,7 @@ export class Game {
     this.world.updateDayNight(this.clock.elapsedTime);
     this._applyGeneratorBuff(delta);
     this.ui.updateStats(this.player.stats);
+    this._applyCameraShake();
 
     if (this.player.isDead()) {
       this.player.spawn();
@@ -134,9 +169,17 @@ export class Game {
       }
     } else if (this.mouse.down && this.player.pointerLocked) {
       this._tryMine(delta);
+    } else {
+      this.miningTarget = null;
+      this.ui.setCrosshairMining(false);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
+  }
+
+  _applyCameraShake() {
+    if (this.shake.intensity <= 0) return;
+    this.camera.position.add(this.shake.offset);
   }
 
   _onKey(e) {
@@ -196,17 +239,45 @@ export class Game {
     if (this.player.mineCooldown > 0) return;
     const hits = this._getLookTargets(CONST.MINE_RANGE);
     const hit = hits.find((h) => h.object.userData.kind === "resource");
-    if (!hit) return;
+    if (!hit) {
+      this.miningTarget = null;
+      this.ui.setCrosshairMining(false);
+      return;
+    }
+
     const node = hit.object;
+    this.miningTarget = node;
+    this.ui.setCrosshairMining(true);
+
     node.userData.hp -= CONST.MINE_DAMAGE;
-    node.scale.setScalar(0.9);
-    setTimeout(() => node.scale.setScalar(1), 60);
+    const newRatio = node.userData.hp / node.userData.maxHp;
+    const punch = 0.85 + (1 - newRatio) * 0.15;
+    node.scale.setScalar(punch);
+    setTimeout(() => {
+      if (node.parent) node.scale.setScalar(1 + Math.sin(this.clock.elapsedTime * 2.5 + node.userData.pulse) * 0.06);
+    }, 50);
+
+    this.shake.add(0.06);
+    this.audio.playMineHit();
+    this.particles.spawn(
+      hit.point,
+      ITEM_COLORS[node.userData.itemId] || 0xaabbcc,
+      8 + Math.floor((1 - newRatio) * 6)
+    );
+    this.ui.flashCrosshair();
+
     this.player.spendMining(delta);
-    this.player.mineCooldown = 0.25;
+    this.player.mineCooldown = 0.22;
+
     if (node.userData.hp <= 0) {
+      this.audio.playMineBreak();
+      this.shake.add(0.12);
+      this.particles.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 18);
       this.inventory.addItem(node.userData.itemId, node.userData.drop);
       this.world.group.remove(node);
       this.world.resources = this.world.resources.filter((r) => r !== node);
+      this.miningTarget = null;
+      this.ui.setCrosshairMining(false);
       if (!this.triggers.mine) {
         this.triggers.mine = true;
         this.ui.showEva(EVA_MESSAGES.firstMine);
@@ -229,6 +300,7 @@ export class Game {
     if (wreck.userData.isCore) {
       this.ui.showEva(EVA_MESSAGES.auroraCore);
       this.playing = false;
+      this.audio.stopAmbience();
       this.ui.showComplete();
     }
   }
@@ -239,14 +311,15 @@ export class Game {
       this.preview = null;
     }
     if (!this.buildMode) return;
-    const color = 0x66aaff;
     this.preview = new THREE.Mesh(
       new THREE.BoxGeometry(2, 1, 2),
       new THREE.MeshStandardMaterial({
-        color,
+        color: 0x66aaff,
         transparent: true,
         opacity: 0.45,
         depthWrite: false,
+        emissive: 0x2266aa,
+        emissiveIntensity: 0.4,
       })
     );
     this.scene.add(this.preview);
@@ -255,15 +328,12 @@ export class Game {
   _updatePreview() {
     if (!this.preview) return;
     const { origin, dir } = this.player.lookRay(20);
-    const groundY = this.world.surfaceY(
-      origin.x + dir.x * 8,
-      origin.z + dir.z * 8
-    );
     let x = origin.x + dir.x * 8;
     let z = origin.z + dir.z * 8;
     const g = CONST.BUILD_GRID;
     x = Math.round(x / g) * g;
     z = Math.round(z / g) * g;
+    const groundY = this.world.surfaceY(x, z);
     this.preview.position.set(x, groundY + 0.6, z);
   }
 
@@ -289,8 +359,12 @@ export class Game {
   }
 
   _onResize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(w, h);
+    this.composer.setSize(w, h);
+    this.bloomPass.resolution.set(w, h);
   }
 }

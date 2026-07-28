@@ -20,8 +20,11 @@ export class UI {
     this.craftStatus = document.getElementById("craft-status");
     this.buildList = document.getElementById("build-list");
     this.inventorySlots = document.getElementById("inventory-slots");
+    this.crosshair = document.getElementById("crosshair");
+    this.vignette = document.getElementById("vignette");
     this.selectedRecipe = 0;
     this.evaTimer = 0;
+    this.crosshairFlash = 0;
     this._bindRecipes();
     this._bindBuildings();
   }
@@ -70,12 +73,14 @@ export class UI {
     this.craftPanel.classList.add("hidden");
     this.buildPanel.classList.add("hidden");
     this.completePanel.classList.add("hidden");
+    this.vignette?.classList.add("hidden");
   }
 
   showGame() {
     this.mainMenu.classList.add("hidden");
     this.hud.classList.remove("hidden");
     this.completePanel.classList.add("hidden");
+    this.vignette?.classList.remove("hidden");
   }
 
   showComplete() {
@@ -97,7 +102,7 @@ export class UI {
       this.hint.textContent = "B — выход | 1-5 модуль | ЛКМ — поставить";
     } else {
       this.hint.textContent =
-        "WASD — движение | ЛКМ — добыча | E — взаимодействие | Tab — инвентарь | C — крафт | B — строительство";
+        "WASD — движение | Shift — бег | ЛКМ — добыча | E — взаимодействие | Tab — инвентарь | C — крафт | B — строительство";
     }
   }
 
@@ -120,6 +125,17 @@ export class UI {
     document.getElementById("bar-energy").style.transform = `scaleX(${stats.energy / 100})`;
     document.getElementById("bar-health").style.transform = `scaleX(${stats.health / 100})`;
     document.getElementById("temp-value").textContent = `${Math.round(stats.temperature)}°C`;
+
+    const lowO2 = stats.oxygen < 25;
+    const lowEnergy = stats.energy < 20;
+    document.getElementById("bar-o2").parentElement.parentElement.classList.toggle("critical", lowO2);
+    document.getElementById("bar-energy").parentElement.parentElement.classList.toggle("warn", lowEnergy);
+
+    if (this.vignette) {
+      const danger = Math.max(0, 1 - stats.oxygen / 25) * 0.55;
+      this.vignette.style.opacity = String(0.35 + danger);
+      this.vignette.classList.toggle("critical", lowO2);
+    }
   }
 
   updateInventory(inventory) {
@@ -149,16 +165,41 @@ export class UI {
     this.craftStatus.textContent = `Нужно: ${needs}${ok ? " ✓" : ""}`;
   }
 
-  showEva(text, seconds = 6) {
-    this.evaText.textContent = text;
+  showEva(text, seconds = 7) {
+    this.evaText.textContent = "";
     this.evaBox.classList.remove("hidden");
+    this.evaBox.classList.add("typing");
     this.evaTimer = seconds;
+    let i = 0;
+    const tick = () => {
+      if (i <= text.length) {
+        this.evaText.textContent = text.slice(0, i);
+        i++;
+        setTimeout(tick, 18);
+      } else {
+        this.evaBox.classList.remove("typing");
+      }
+    };
+    tick();
+  }
+
+  setCrosshairMining(active) {
+    this.crosshair?.classList.toggle("mining", active);
+  }
+
+  flashCrosshair() {
+    this.crosshairFlash = 0.12;
+    this.crosshair?.classList.add("hit");
   }
 
   update(delta) {
     if (this.evaTimer > 0) {
       this.evaTimer -= delta;
       if (this.evaTimer <= 0) this.evaBox.classList.add("hidden");
+    }
+    if (this.crosshairFlash > 0) {
+      this.crosshairFlash -= delta;
+      if (this.crosshairFlash <= 0) this.crosshair?.classList.remove("hit");
     }
   }
 

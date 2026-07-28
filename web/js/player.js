@@ -11,10 +11,16 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.onGround = false;
+    this.wasOnGround = true;
     this.stats = { oxygen: 100, energy: 100, health: 100, temperature: 22 };
     this.keys = new Set();
     this.mineCooldown = 0;
     this.pointerLocked = false;
+    this.walkPhase = 0;
+    this.footstepTimer = 0;
+    this.baseFov = 75;
+    this.targetFov = 75;
+    this.onFootstep = null;
   }
 
   spawn() {
@@ -22,6 +28,7 @@ export class Player {
     this.position.y += 1.2;
     this.velocity.set(0, 0, 0);
     this.stats = { oxygen: 100, energy: 100, health: 100, temperature: 22 };
+    this.walkPhase = 0;
     this._syncCamera();
   }
 
@@ -63,8 +70,13 @@ export class Player {
 
     const sprint = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const speed = CONST.PLAYER_SPEED * (sprint ? CONST.PLAYER_SPRINT : 1);
-    this.velocity.x = wish.x * speed;
-    this.velocity.z = wish.z * speed;
+    this.targetFov = sprint && moving ? 82 : 75;
+
+    const accel = 14;
+    const targetVx = wish.x * speed;
+    const targetVz = wish.z * speed;
+    this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVx, accel, delta);
+    this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVz, accel, delta);
     this.velocity.y -= CONST.GRAVITY * delta;
 
     if (this.keys.has("Space") && this.onGround) {
@@ -78,17 +90,31 @@ export class Player {
 
     const ground = getHeight(this.position.x, this.position.z, this.world.seed) + 1.6;
     if (this.position.y <= ground) {
+      if (!this.onGround && !this.wasOnGround) {
+        // landing — handled by game via camera shake if needed
+      }
       this.position.y = ground;
       this.velocity.y = 0;
       this.onGround = true;
     } else {
       this.onGround = false;
     }
+    this.wasOnGround = this.onGround;
 
-    // keep on planet bounds
     const lim = (CONST.PLANET_SIZE * CONST.PLANET_SCALE) / 2 - 2;
     this.position.x = THREE.MathUtils.clamp(this.position.x, -lim, lim);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -lim, lim);
+
+    if (moving && this.onGround) {
+      this.walkPhase += delta * (sprint ? 11 : 8);
+      this.footstepTimer -= delta;
+      if (this.footstepTimer <= 0) {
+        this.footstepTimer = sprint ? 0.28 : 0.42;
+        this.onFootstep?.();
+      }
+    } else {
+      this.walkPhase *= Math.pow(0.001, delta);
+    }
 
     this.stats.oxygen -= CONST.O2_IDLE * delta;
     this.stats.energy = Math.max(0, this.stats.energy - 0.2 * delta);
@@ -99,7 +125,16 @@ export class Player {
     this.stats.oxygen = Math.max(0, this.stats.oxygen);
     this.stats.energy = Math.max(0, this.stats.energy);
     this.mineCooldown = Math.max(0, this.mineCooldown - delta);
+
+    this.camera.fov = THREE.MathUtils.damp(this.camera.fov, this.targetFov, 6, delta);
+    this.camera.updateProjectionMatrix();
     this._syncCamera();
+  }
+
+  getBobOffset() {
+    const bobY = Math.sin(this.walkPhase) * 0.06;
+    const bobX = Math.cos(this.walkPhase * 0.5) * 0.03;
+    return new THREE.Vector3(bobX, bobY, 0);
   }
 
   applyGeneratorO2(amount) {
@@ -125,6 +160,8 @@ export class Player {
 
   _syncCamera() {
     this.camera.position.copy(this.position);
+    const bob = this.getBobOffset();
+    this.camera.position.add(bob);
     this.camera.rotation.order = "YXZ";
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
