@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { CONST, ItemId, ITEM_COLORS } from "./constants.js";
+import { CONST, ItemId } from "./constants.js";
+import { buildResourceVisual } from "./resourceMeshes.js";
+import { TextureLibrary } from "./proceduralTextures.js";
 
 function hash2(x, z) {
   const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
@@ -38,9 +40,9 @@ export function getHeight(x, z, seed = 42) {
   return (fbm(x * 0.04 + ox, z * 0.04 + oz) * 2 - 1) * CONST.TERRAIN_HEIGHT;
 }
 
-function makeTerrainMaterial() {
+function makeTerrainMaterial(tex) {
   return new THREE.MeshStandardMaterial({
-    color: 0x4a7a45,
+    map: tex.grass,
     roughness: 0.92,
     metalness: 0.04,
     flatShading: false,
@@ -52,84 +54,10 @@ function resourceKey(itemId, x, z) {
 }
 
 function createResourceNode(itemId, x, y, z) {
-  const group = new THREE.Group();
-  const color = ITEM_COLORS[itemId] || 0x888888;
-  let mesh;
-  if (itemId === ItemId.WOOD) {
-    mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6),
-      new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 })
-    );
-    mesh.position.y = 0.8;
-    const canopy = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 8, 6),
-      new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.85 })
-    );
-    canopy.position.y = 1.7;
-    group.add(mesh, canopy);
-  } else if (itemId === ItemId.CLAY) {
-    mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55, 8, 6),
-      new THREE.MeshStandardMaterial({ color, roughness: 1 })
-    );
-    mesh.scale.set(1.4, 0.55, 1.1);
-    mesh.position.y = 0.25;
-    group.add(mesh);
-  } else if (itemId === ItemId.FOOD) {
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.25, 0.5, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xc4a484 })
-    );
-    body.rotation.z = Math.PI / 2;
-    body.position.y = 0.45;
-    group.add(body);
-  } else if (itemId === ItemId.WATER) {
-    mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.7, 0.7, 0.15, 12),
-      new THREE.MeshStandardMaterial({
-        color: 0x3a8fd6,
-        transparent: true,
-        opacity: 0.75,
-        roughness: 0.2,
-      })
-    );
-    mesh.position.y = 0.05;
-    group.add(mesh);
-  } else if (itemId === ItemId.SEEDS || itemId === ItemId.ORGANIC) {
-    mesh = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35, 0.9, 6),
-      new THREE.MeshStandardMaterial({ color: 0x3d9a4a })
-    );
-    mesh.position.y = 0.45;
-    group.add(mesh);
-  } else if (itemId === ItemId.WRECK_PART) {
-    mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1.2, 0.4, 0.8),
-      new THREE.MeshStandardMaterial({
-        color: 0x6a7a8a,
-        metalness: 0.7,
-        roughness: 0.35,
-        emissive: 0x112233,
-        emissiveIntensity: 0.3,
-      })
-    );
-    mesh.position.y = 0.25;
-    group.add(mesh);
-  } else {
-    mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.45, 0),
-      new THREE.MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: 0.25,
-        metalness: 0.4,
-        roughness: 0.4,
-      })
-    );
-    mesh.position.y = 0.45;
-    group.add(mesh);
-  }
+  const group = buildResourceVisual(itemId);
   group.position.set(x, y, z);
+  // Slight random yaw so nodes don't look identical
+  group.rotation.y = hash2(x * 0.7, z * 1.3) * Math.PI * 2;
   const key = resourceKey(itemId, x, z);
   group.userData = {
     kind: "resource",
@@ -162,7 +90,8 @@ export class ChunkWorld {
     this.hangars = [];
     this.harvested = new Set();
     this.spawn = new THREE.Vector3(0, 0, 0);
-    this.terrainMat = makeTerrainMaterial();
+    this.textures = new TextureLibrary();
+    this.terrainMat = makeTerrainMaterial(this.textures);
     this._sky();
   }
 

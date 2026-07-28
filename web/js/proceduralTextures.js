@@ -290,6 +290,96 @@ export function makeGrassBladeTexture() {
   return makeTextureFromCanvas(c);
 }
 
+export function makeClayTexture() {
+  const { c, ctx } = canvas(256, 256);
+  for (let y = 0; y < 256; y++) {
+    for (let x = 0; x < 256; x++) {
+      const n = fbm(x * 0.05, y * 0.05, 5);
+      const r = 150 + n * 45;
+      const g = 95 + n * 30;
+      const b = 55 + n * 20;
+      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  for (let i = 0; i < 600; i++) {
+    ctx.fillStyle = `rgba(${80 + Math.random() * 40},40,20,${0.08 + Math.random() * 0.12})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      Math.random() * 256,
+      Math.random() * 256,
+      2 + Math.random() * 8,
+      1 + Math.random() * 4,
+      Math.random() * Math.PI,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+  return makeTextureFromCanvas(c, { repeat: 3 });
+}
+
+export function makeWaterTexture() {
+  const { c, ctx } = canvas(256, 256);
+  for (let y = 0; y < 256; y++) {
+    for (let x = 0; x < 256; x++) {
+      const n = fbm(x * 0.04, y * 0.05, 4);
+      const n2 = fbm(x * 0.12 + 10, y * 0.1, 3);
+      const r = 20 + n * 30;
+      const g = 90 + n * 50 + n2 * 20;
+      const b = 140 + n * 70;
+      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  ctx.globalAlpha = 0.35;
+  for (let i = 0; i < 40; i++) {
+    ctx.strokeStyle = "#dff6ff";
+    ctx.lineWidth = 1 + Math.random();
+    ctx.beginPath();
+    const sy = Math.random() * 256;
+    ctx.moveTo(0, sy);
+    for (let x = 0; x < 256; x += 16) {
+      ctx.lineTo(x, sy + Math.sin(x * 0.08 + i) * 4);
+    }
+    ctx.stroke();
+  }
+  return makeTextureFromCanvas(c, { repeat: 2 });
+}
+
+export function makeFurTexture() {
+  const { c, ctx } = canvas(128, 128);
+  ctx.fillStyle = "#b8926a";
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 3500; i++) {
+    const x = Math.random() * 128;
+    const y = Math.random() * 128;
+    const shade = 140 + Math.random() * 50;
+    ctx.strokeStyle = `rgba(${shade | 0},${(shade * 0.78) | 0},${(shade * 0.5) | 0},0.55)`;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 5);
+    ctx.stroke();
+  }
+  return makeTextureFromCanvas(c, { repeat: 2 });
+}
+
+export function makePlantTexture() {
+  const { c, ctx } = canvas(128, 128);
+  ctx.fillStyle = "#245530";
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 80; i++) {
+    const x = Math.random() * 128;
+    const y = Math.random() * 128;
+    ctx.fillStyle = `rgba(${40 + Math.random() * 50},${120 + Math.random() * 80},${40 + Math.random() * 40},0.7)`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 6 + Math.random() * 10, 3 + Math.random() * 5, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return makeTextureFromCanvas(c, { repeat: 1 });
+}
+
 export class TextureLibrary {
   constructor() {
     this.grass = makeGrassTexture();
@@ -298,6 +388,10 @@ export class TextureLibrary {
     this.terrainNormal = makeTerrainNormalMap();
     this.bark = makeBarkTexture();
     this.leaf = makeLeafTexture();
+    this.clay = makeClayTexture();
+    this.water = makeWaterTexture();
+    this.fur = makeFurTexture();
+    this.plant = makePlantTexture();
     this.metal = makeMetalTexture();
     this.metalDark = makeMetalTexture("#3a4550");
     this.metalBlue = makeMetalTexture("#4a6080");
