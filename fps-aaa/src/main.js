@@ -217,6 +217,15 @@ async function init() {
 // --------------------------------------------------------------------------
 // game flow
 
+let waveRespawnTimer = null;
+
+function clearWaveTimer() {
+	if ( waveRespawnTimer ) {
+		clearTimeout( waveRespawnTimer );
+		waveRespawnTimer = null;
+	}
+}
+
 function wireGameFlow() {
 	bus.on( 'enemy:killed', ( e ) => {
 		game.stats.kills ++;
@@ -226,6 +235,15 @@ function wireGameFlow() {
 	bus.on( 'hit:confirm', () => { game.stats.hits ++; } );
 	bus.on( 'score:add', ( e ) => { game.stats.score += ( e?.amount || 0 ); } );
 	bus.on( 'wave:start', ( e ) => { game.stats.wave = e?.wave ?? game.stats.wave; } );
+	bus.on( 'wave:clear', () => {
+		clearWaveTimer();
+		if ( game.state !== 'playing' ) return;
+		// Brief breather after the HUD "sector secure" banner, then the next squad.
+		waveRespawnTimer = setTimeout( () => {
+			waveRespawnTimer = null;
+			if ( game.state === 'playing' ) game.enemies?.spawnWave?.();
+		}, 2800 );
+	} );
 	bus.on( 'player:died', () => endGame() );
 
 	bus.on( 'input:keydown', ( e ) => {
@@ -258,8 +276,9 @@ function applySettings( patch ) {
 	bus.emit( 'settings:changed', settings );
 }
 
-function startGame() {
+function startGame( opts = {} ) {
 	if ( game.state === 'playing' ) return;
+	clearWaveTimer();
 	game.audio?.unlock?.();
 	game.stats = { kills: 0, headshots: 0, shots: 0, hits: 0, wave: 0, score: 0, startedAt: performance.now(), timeAlive: 0 };
 	game.player.reset?.();
@@ -275,6 +294,9 @@ function startGame() {
 	engine.paused = false;
 	input.requestLock();
 	bus.emit( 'game:start', {} );
+	// Deploy must actually bring hostiles online — spawnWave was only wired in the
+	// debug/screenshot path, so a normal play session never saw enemies.
+	if ( opts.spawnWave !== false ) game.enemies?.spawnWave?.( opts.waveCount );
 }
 
 function pauseGame() {
@@ -302,6 +324,7 @@ function restartGame() {
 
 function endGame() {
 	if ( game.state === 'dead' ) return;
+	clearWaveTimer();
 	game.state = 'dead';
 	game.stats.timeAlive = ( performance.now() - game.stats.startedAt ) / 1000;
 	input.exitLock();
@@ -555,7 +578,11 @@ function setupDebugHarness() {
 
 	// Screenshot mode: run the real start path, then pin the camera.
 	document.body.classList.add( 'shot-mode' );
-	startGame();
+	const enemyParam = params.get( 'enemies' );
+	startGame( {
+		spawnWave: enemyParam !== '0',
+		waveCount: enemyParam !== null && enemyParam !== '0' ? Number( enemyParam ) || 5 : undefined,
+	} );
 	game.hud.setVisible?.( params.get( 'hud' ) !== '0' );
 
 	const views = shotViews( game.world );
@@ -571,8 +598,6 @@ function setupDebugHarness() {
 			};
 		}
 	}
-
-	if ( params.get( 'enemies' ) !== '0' ) game.enemies?.spawnWave?.( Number( params.get( 'enemies' ) ) || 5 );
 	if ( params.get( 'firing' ) === '1' ) {
 		setInterval( () => bus.emit( 'debug:fire' ), 90 );
 	}
