@@ -29,7 +29,7 @@ export class Game {
     this.playing = false;
     this.buildMode = false;
     this.selectedBuilding = BuildingId.FOUNDATION;
-    this.triggers = { mine: false, craft: false, build: false };
+    this.triggers = { mine: false, craft: false, build: false, aurora: false };
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
     this.mouse = { down: false };
