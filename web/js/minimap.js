@@ -91,10 +91,10 @@ export class Minimap {
       if (Math.abs(dx) > VIEW_RANGE + CELL || Math.abs(dz) > VIEW_RANGE + CELL) continue;
 
       const h = getHeight(wx, wz, seed);
-      if (h <  -1.2) {
+      if (isWaterCell(wx, wz, seed)) {
         ctx.fillStyle = "rgb(40,110,170)";
       } else {
-        const t = Math.max(0, Math.min(1, (h + 10) / 20));
+        const t = Math.max(0, Math.min(1, (h + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2)));
         const g = 70 + Math.floor(t * 50);
         const b = 55 + Math.floor((1 - t) * 40);
         const r = 40 + Math.floor(t * 30);
