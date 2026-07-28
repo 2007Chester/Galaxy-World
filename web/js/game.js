@@ -8,6 +8,7 @@ import {
   EVA_MESSAGES,
   ITEM_COLORS,
   ITEM_NAMES,
+  ItemId,
   RECIPES,
 } from "./constants.js";
 import { GameAudio } from "./audio.js";
@@ -125,7 +126,7 @@ export class Game {
     };
     this.player.spawn();
     this.inventory.reset();
-    this.triggers = { mine: false, craft: false, build: false };
+    this.triggers = { mine: false, craft: false, build: false, aurora: false };
     this.buildMode = false;
     this.miningTarget = null;
     this.playing = true;
@@ -347,10 +348,15 @@ export class Game {
       );
     }
     if (wreck.userData.isCore) {
-      this.ui.showEva(EVA_MESSAGES.auroraCore);
-      this.playing = false;
-      this.audio.stopAmbience();
-      this.ui.showComplete();
+      if (!this.triggers.aurora) {
+        this.triggers.aurora = true;
+        // Milestone reward — game continues as open sandbox.
+        this.inventory.addItem(ItemId.CIRCUIT, 2);
+        this.inventory.addItem(ItemId.METAL_PLATE, 2);
+        this.ui.showEva(EVA_MESSAGES.auroraCore, 10);
+      } else {
+        this.ui.showEva(EVA_MESSAGES.auroraCoreRepeat, 4);
+      }
     }
   }
 
