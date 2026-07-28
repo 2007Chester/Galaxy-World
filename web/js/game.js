@@ -301,7 +301,7 @@ export class Game {
       this.worldName = save.worldName;
       this.planetIndex = continuePlay ? save.planetIndex ?? 0 : 0;
       this.triggers = continuePlay
-        ? { ...save.triggers }
+        ? { hangarReady: false, ...save.triggers }
         : {
             mine: false,
             craft: false,
@@ -309,14 +309,13 @@ export class Game {
             aurora: false,
             hangar: false,
             ship: false,
-            hangarReady: this.inventory.hasItems(BUILD_COSTS[BuildingId.HANGAR]),
+            hangarReady: false,
           };
 
       if (continuePlay) this.inventory.load(save.inventory);
       else this.inventory.reset();
 
-      this.triggers.hangarReady =
-        !!this.triggers.hangarReady || this.inventory.hasItems(BUILD_COSTS[BuildingId.HANGAR]);
+      this.triggers.hangarReady = this.inventory.hasItems(BUILD_COSTS[BuildingId.HANGAR]);
       this.ui.refreshBuildList(this.inventory);
 
       const planetKey = String(this.planetIndex);
