@@ -1022,8 +1022,9 @@ button.slot.active,
   .build-list { grid-template-columns: 1fr 1fr; }
 @media (max-width: 900px) {
   .minimap-wrap {
-    top: auto;
-    bottom: 72px;
+    top: 12px;
+    right: 12px;
+    bottom: auto;
     width: 150px;
     padding: 6px 8px 8px;
   }
