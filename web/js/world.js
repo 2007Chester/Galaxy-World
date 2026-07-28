@@ -372,6 +372,81 @@ export class ChunkWorld {
     this.sun.intensity = 0.65 + Math.max(Math.sin(a), 0) * 0.7;
   }
 
+  /**
+   * Wander / flee AI + leg animation for food animals.
+   * @param {number} delta
+   * @param {{x:number,z:number}|null} playerPos
+   */
+  updateAnimals(delta, playerPos = null) {
+    for (const node of this.resources) {
+      const u = node.userData;
+      if (!u?.isAnimal) continue;
+
+      u.stateTimer -= delta;
+      const px = playerPos?.x ?? node.position.x;
+      const pz = playerPos?.z ?? node.position.z;
+      const toPlayerX = node.position.x - px;
+      const toPlayerZ = node.position.z - pz;
+      const distPlayer = Math.hypot(toPlayerX, toPlayerZ);
+      const fleeing = distPlayer < 9;
+
+      if (fleeing) {
+        u.walking = true;
+        const len = distPlayer || 1;
+        u.targetX = node.position.x + (toPlayerX / len) * 8;
+        u.targetZ = node.position.z + (toPlayerZ / len) * 8;
+        u.speed = 2.8;
+      } else if (u.stateTimer <= 0) {
+        u.walking = Math.random() > 0.35;
+        u.stateTimer = u.walking ? 2 + Math.random() * 3.5 : 1 + Math.random() * 2.5;
+        u.speed = 1.1 + Math.random() * 0.8;
+        if (u.walking) {
+          const ang = Math.random() * Math.PI * 2;
+          const rad = 2 + Math.random() * 7;
+          u.targetX = u.homeX + Math.cos(ang) * rad;
+          u.targetZ = u.homeZ + Math.sin(ang) * rad;
+        }
+      }
+
+      let moving = false;
+      if (u.walking) {
+        const dx = u.targetX - node.position.x;
+        const dz = u.targetZ - node.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.35) {
+          u.walking = false;
+          u.stateTimer = 0.8 + Math.random() * 1.5;
+        } else {
+          moving = true;
+          const step = Math.min(dist, u.speed * delta);
+          node.position.x += (dx / dist) * step;
+          node.position.z += (dz / dist) * step;
+          node.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;
+        }
+      }
+
+      node.position.y = getHeight(node.position.x, node.position.z, this.seed);
+
+      if (moving) {
+        u.walkPhase += delta * (fleeing ? 14 : 9);
+        for (const leg of u.legs || []) {
+          const phase = leg.userData.phase || 0;
+          const swing = Math.sin(u.walkPhase + phase) * 0.55;
+          leg.rotation.z = swing;
+          leg.position.y =
+            (leg.userData.baseY || 0.18) + Math.abs(Math.sin(u.walkPhase + phase)) * 0.04;
+        }
+        if (u.tail) u.tail.rotation.y = Math.sin(u.walkPhase * 0.8) * 0.35;
+      } else {
+        for (const leg of u.legs || []) {
+          leg.rotation.z *= 0.85;
+          leg.position.y = leg.userData.baseY || 0.18;
+        }
+        if (u.tail) u.tail.rotation.y *= 0.9;
+      }
+    }
+  }
+
   serializePlanet() {
     return {
       seed: this.seed,
