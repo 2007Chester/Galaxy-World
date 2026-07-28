@@ -692,8 +692,9 @@ html, body, #app {
 .minimap-wrap {
   position: absolute;
   top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 14px;
+  left: auto;
+  transform: none;
   padding: 8px 10px 10px;
   width: 190px;
   pointer-events: none;
