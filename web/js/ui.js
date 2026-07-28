@@ -29,6 +29,8 @@ export class UI {
     this.mineProgress = document.getElementById("mine-progress");
     this.mineProgressLabel = document.getElementById("mine-progress-label");
     this.mineBarFill = document.getElementById("mine-bar-fill");
+    this.lootToast = document.getElementById("loot-toast");
+    this.lootToastTimer = 0;
     this.selectedRecipe = 0;
     this.selectedSlot = -1;
     this.evaTimer = 0;
@@ -288,7 +290,7 @@ export class UI {
   }
 
   /**
-   * @param {{ progress:number, name:string, remaining?:number } | null} info
+   * @param {{ progress:number, name:string, amount?:number } | null} info
    * progress 0..1 = how much already mined
    */
   setMiningProgress(info) {
@@ -301,9 +303,23 @@ export class UI {
     this.mineProgress.classList.remove("hidden");
     if (this.mineBarFill) this.mineBarFill.style.transform = `scaleX(${p})`;
     const pct = Math.round(p * 100);
+    const left = Math.max(0, 100 - pct);
     if (this.mineProgressLabel) {
-      this.mineProgressLabel.textContent = `${info.name} · ${pct}%`;
+      const drop =
+        info.amount != null ? ` · добыча ×${info.amount}` : "";
+      this.mineProgressLabel.textContent = `${info.name}${drop} · осталось ${left}%`;
     }
+  }
+
+  showLootToast(name, amount) {
+    if (!this.lootToast) return;
+    this.lootToast.textContent = `+${amount} ${name}`;
+    this.lootToast.classList.remove("hidden");
+    // restart CSS animation
+    this.lootToast.style.animation = "none";
+    void this.lootToast.offsetWidth;
+    this.lootToast.style.animation = "";
+    this.lootToastTimer = 0.9;
   }
 
   flashCrosshair() {
@@ -319,6 +335,10 @@ export class UI {
     if (this.crosshairFlash > 0) {
       this.crosshairFlash -= delta;
       if (this.crosshairFlash <= 0) this.crosshair?.classList.remove("hit");
+    }
+    if (this.lootToastTimer > 0) {
+      this.lootToastTimer -= delta;
+      if (this.lootToastTimer <= 0) this.lootToast?.classList.add("hidden");
     }
   }
 

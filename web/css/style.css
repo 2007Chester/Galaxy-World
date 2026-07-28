@@ -887,6 +887,37 @@ html, body, #app {
   box-shadow: 0 0 8px rgba(126, 240, 212, 0.45);
 }
 
+.loot-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 48px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 13;
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e8fff6;
+  background: rgba(4, 14, 22, 0.82);
+  border: 1px solid rgba(126, 240, 212, 0.45);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  animation: loot-pop 0.85s ease-out both;
+}
+
+.loot-toast.hidden {
+  display: none !important;
+  animation: none;
+}
+
+@keyframes loot-pop {
+  0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.92); }
+  20% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  70% { opacity: 1; transform: translateX(-50%) translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(0.98); }
+}
+
 #hint-label {
   position: absolute;
   left: 50%;
