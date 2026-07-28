@@ -26,6 +26,7 @@ import {
   writeSave,
 } from "./save.js";
 import { Minimap } from "./minimap.js";
+import { ViewHands } from "./hands.js";
 import { UI } from "./ui.js";
 import { World } from "./world.js";
 
@@ -84,7 +85,9 @@ export class Game {
     this.scene.background = new THREE.Color(0x0a1628);
     this.scene.fog = new THREE.Fog(0x0a1628, 50, 160);
 
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 2000);
+    this.scene.add(this.camera);
+    this.hands = new ViewHands(this.camera);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -507,6 +510,21 @@ export class Game {
       capacity: this.inventory.oxygenCapacity(),
       mode: this.mode,
       planet: this.planetIndex,
+    });
+
+    this.hands.setTool(this.inventory.equippedTool);
+    this.hands.setVisible(this.mode === "planet" && !this.ui.isUiBlocking());
+    const moving =
+      this.player.keys.has("KeyW") ||
+      this.player.keys.has("KeyA") ||
+      this.player.keys.has("KeyS") ||
+      this.player.keys.has("KeyD");
+    const sprint = this.player.keys.has("ShiftLeft") || this.player.keys.has("ShiftRight");
+    this.hands.update(delta, {
+      moving: moving && this.player.onGround,
+      sprint,
+      mining: this.player.keys.has("KeyE") && this.mode === "planet",
+      flying: this.player.flying || this.mode === "space",
     });
 
     this.minimap.draw({
