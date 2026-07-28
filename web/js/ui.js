@@ -26,6 +26,9 @@ export class UI {
     this.vignette = document.getElementById("vignette");
     this.toolLabel = document.getElementById("tool-value");
     this.modeLabel = document.getElementById("mode-value");
+    this.mineProgress = document.getElementById("mine-progress");
+    this.mineProgressLabel = document.getElementById("mine-progress-label");
+    this.mineBarFill = document.getElementById("mine-bar-fill");
     this.selectedRecipe = 0;
     this.selectedSlot = -1;
     this.evaTimer = 0;
@@ -281,6 +284,26 @@ export class UI {
 
   setCrosshairMining(active) {
     this.crosshair?.classList.toggle("mining", active);
+    if (!active) this.setMiningProgress(null);
+  }
+
+  /**
+   * @param {{ progress:number, name:string, remaining?:number } | null} info
+   * progress 0..1 = how much already mined
+   */
+  setMiningProgress(info) {
+    if (!this.mineProgress) return;
+    if (!info) {
+      this.mineProgress.classList.add("hidden");
+      return;
+    }
+    const p = Math.max(0, Math.min(1, info.progress));
+    this.mineProgress.classList.remove("hidden");
+    if (this.mineBarFill) this.mineBarFill.style.transform = `scaleX(${p})`;
+    const pct = Math.round(p * 100);
+    if (this.mineProgressLabel) {
+      this.mineProgressLabel.textContent = `${info.name} · ${pct}%`;
+    }
   }
 
   flashCrosshair() {

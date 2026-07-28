@@ -847,6 +847,46 @@ html, body, #app {
   background: #fff;
 }
 
+.mine-progress {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 28px);
+  transform: translateX(-50%);
+  width: min(220px, 55vw);
+  pointer-events: none;
+  z-index: 12;
+  text-align: center;
+}
+
+.mine-progress #mine-progress-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(220, 240, 255, 0.9);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.mine-bar {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(154, 215, 255, 0.35);
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.mine-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #3d9cff, #7ef0d4);
+  transition: transform 0.06s linear;
+  box-shadow: 0 0 8px rgba(126, 240, 212, 0.45);
+}
+
 #hint-label {
   position: absolute;
   left: 50%;

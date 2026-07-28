@@ -667,6 +667,8 @@ export class Game {
       return;
     }
     const node = this._findGameObject(hit.object);
+    const maxHp = node.userData.maxHp || 70;
+    if (node.userData.hp == null) node.userData.hp = maxHp;
     const mult = gatherMultiplier(node.userData.itemId, this.inventory.equippedTool);
     const dmg = CONST.MINE_DAMAGE * mult * Math.max(delta * 4, 0.35);
     node.userData.hp -= dmg;
@@ -675,6 +677,11 @@ export class Game {
     this.miningTarget = node;
     this.ui.setCrosshairMining(true);
     this.ui.flashCrosshair();
+    const progress = 1 - Math.max(0, node.userData.hp) / maxHp;
+    this.ui.setMiningProgress({
+      progress,
+      name: ITEM_NAMES[node.userData.itemId] || "Ресурс",
+    });
     this.audio.playMineHit();
     this.shake.add(0.035 / Math.max(mult, 0.35));
     this.particles?.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 8);
@@ -693,6 +700,7 @@ export class Game {
       this.world.resources = this.world.resources.filter((r) => r !== node);
       this.world.wreckage = this.world.wreckage.filter((r) => r !== node);
       this.miningTarget = null;
+      this.ui.setMiningProgress({ progress: 1, name: ITEM_NAMES[node.userData.itemId] || "Ресурс" });
       this.ui.setCrosshairMining(false);
       if (!this.triggers.mine) {
         this.triggers.mine = true;
