@@ -160,6 +160,7 @@ function makeAnimal(tex) {
   const g = new THREE.Group();
   const fur = mat(tex.fur, { roughness: 0.9 });
   const dark = mat(tex.fur, { roughness: 0.95, color: 0x886644 });
+  const legs = [];
 
   const body = addShadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.55, 4, 10), fur));
   body.rotation.z = Math.PI / 2;
@@ -175,23 +176,28 @@ function makeAnimal(tex) {
   snout.scale.set(1.2, 0.8, 0.8);
   g.add(snout);
 
+  const legSpecs = [
+    [0.18, 0.12, 0],
+    [0.18, -0.12, Math.PI],
+    [-0.22, 0.12, Math.PI],
+    [-0.22, -0.12, 0],
+  ];
+  for (const [lx, lz, phase] of legSpecs) {
+    const leg = addShadow(
+      new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.35, 6), dark)
+    );
+    leg.position.set(lx, 0.18, lz);
+    leg.userData.baseY = 0.18;
+    leg.userData.phase = phase;
+    legs.push(leg);
+    g.add(leg);
+  }
+
   for (const side of [-1, 1]) {
     const ear = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 5), dark));
     ear.position.set(0.38, 0.78, side * 0.12);
     ear.rotation.x = side * 0.3;
     g.add(ear);
-
-    const leg = addShadow(
-      new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.35, 6), dark)
-    );
-    leg.position.set(side * 0.12, 0.18, side * 0.12);
-    g.add(leg);
-
-    const legB = addShadow(
-      new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.35, 6), dark)
-    );
-    legB.position.set(-side * 0.18, 0.18, -side * 0.1);
-    g.add(legB);
   }
 
   const tail = addShadow(
@@ -199,7 +205,11 @@ function makeAnimal(tex) {
   );
   tail.position.set(-0.4, 0.5, 0);
   tail.rotation.z = 1.1;
+  g.userData.tail = tail;
   g.add(tail);
+
+  g.userData.isAnimal = true;
+  g.userData.legs = legs;
   return g;
 }
 

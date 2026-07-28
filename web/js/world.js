@@ -55,8 +55,11 @@ function resourceKey(itemId, x, z) {
 
 function createResourceNode(itemId, x, y, z) {
   const group = buildResourceVisual(itemId);
+  const legs = group.userData.legs || [];
+  const tail = group.userData.tail || null;
+  const isAnimal = !!group.userData.isAnimal;
+
   group.position.set(x, y, z);
-  // Slight random yaw so nodes don't look identical
   group.rotation.y = hash2(x * 0.7, z * 1.3) * Math.PI * 2;
   const key = resourceKey(itemId, x, z);
   group.userData = {
@@ -66,6 +69,17 @@ function createResourceNode(itemId, x, y, z) {
     drop: itemId === ItemId.WRECK_PART ? 1 : 2 + ((Math.abs(x * 10) | 0) % 3),
     hp: 70,
     maxHp: 70,
+    isAnimal,
+    legs,
+    tail,
+    homeX: x,
+    homeZ: z,
+    walkPhase: Math.random() * Math.PI * 2,
+    stateTimer: 0.5 + Math.random() * 2,
+    walking: true,
+    speed: 1.15 + Math.random() * 0.85,
+    targetX: x + (Math.random() - 0.5) * 6,
+    targetZ: z + (Math.random() - 0.5) * 6,
   };
   group.traverse((c) => {
     if (c.isMesh) {
