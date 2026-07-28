@@ -59,6 +59,11 @@ export class Game {
     this.spaceMarkers = [];
     this.saveTimer = 0;
     this.generating = false;
+    this.entering = false;
+    this.loadOverlay = document.getElementById("world-loading");
+    this.loadBarFill = document.getElementById("load-bar-fill");
+    this.loadStatus = document.getElementById("load-status");
+    this.loadWorldName = document.getElementById("load-world-name");
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -153,10 +158,10 @@ export class Game {
     if (this.saveSummary) this.saveSummary.textContent = formatSaveSummary(data);
     const has = !!data;
     const played = !!data?.played;
-    if (this.btnEnter) this.btnEnter.disabled = !has || this.generating;
-    if (this.btnContinue) this.btnContinue.disabled = !has || !played || this.generating;
-    if (this.btnDelete) this.btnDelete.disabled = !has || this.generating;
-    if (this.btnGenerate) this.btnGenerate.disabled = this.generating;
+    if (this.btnEnter) this.btnEnter.disabled = !has || this.generating || this.entering;
+    if (this.btnContinue) this.btnContinue.disabled = !has || !played || this.generating || this.entering;
+    if (this.btnDelete) this.btnDelete.disabled = !has || this.generating || this.entering;
+    if (this.btnGenerate) this.btnGenerate.disabled = this.generating || this.entering;
     if (this.worldNameInput && data?.worldName && !this.worldNameInput.value) {
       this.worldNameInput.value = data.worldName;
     }
@@ -207,20 +212,48 @@ export class Game {
     this.refreshMenu();
   }
 
-  enterWorld(continuePlay) {
+  _showLoading(worldName, continuing) {
+    this.loadOverlay?.classList.remove("hidden");
+    if (this.loadWorldName) {
+      this.loadWorldName.textContent = worldName ? `«${worldName}»` : "";
+    }
+    if (this.loadBarFill) this.loadBarFill.style.transform = "scaleX(0.08)";
+    if (this.loadStatus) {
+      this.loadStatus.textContent = continuing
+        ? "Восстановление сохранения…"
+        : "Открытие сектора…";
+    }
+  }
+
+  _setLoadProgress(ratio, text) {
+    if (this.loadBarFill) {
+      this.loadBarFill.style.transform = `scaleX(${Math.max(0.08, Math.min(1, ratio))})`;
+    }
+    if (text && this.loadStatus) this.loadStatus.textContent = text;
+  }
+
+  _hideLoading() {
+    this.loadOverlay?.classList.add("hidden");
+  }
+
+  async _yieldPaint() {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }
+
+  async enterWorld(continuePlay) {
+    if (this.entering || this.generating) return;
     const data = loadSave();
     if (!data) {
       alert("Сначала сгенерируйте мир.");
       return;
     }
-    this.startFromSave(data, { continuePlay: !!continuePlay });
+    await this.startFromSave(data, { continuePlay: !!continuePlay });
   }
 
-  startFromSave(data, { continuePlay = false } = {}) {
+  async startFromSave(data, { continuePlay = false } = {}) {
+    if (this.entering) return;
     let save = data;
 
-    // "Войти в мир" on already-played save: continue (same as Продолжить)
-    // Unless user wants fresh — only reset via generate with confirm
     if (!continuePlay && data.played) {
       const choice = confirm(
         "В этом мире уже есть прогресс.\nOK — продолжить игру\nОтмена — остаться в меню"
@@ -229,48 +262,70 @@ export class Game {
       continuePlay = true;
     }
 
-    this.homeSeed = save.homeSeed;
-    this.worldName = save.worldName;
-    this.planetIndex = continuePlay ? save.planetIndex ?? 0 : 0;
-    this.triggers = continuePlay
-      ? { ...save.triggers }
-      : {
-          mine: false,
-          craft: false,
-          build: false,
-          aurora: false,
-          hangar: false,
-          ship: false,
+    this.entering = true;
+    this.refreshMenu();
+    this._showLoading(save.worldName, continuePlay);
+    await this._yieldPaint();
+
+    try {
+      this._setLoadProgress(0.2, "Чтение координат высадки…");
+      await this._yieldPaint();
+
+      this.homeSeed = save.homeSeed;
+      this.worldName = save.worldName;
+      this.planetIndex = continuePlay ? save.planetIndex ?? 0 : 0;
+      this.triggers = continuePlay
+        ? { ...save.triggers }
+        : {
+            mine: false,
+            craft: false,
+            build: false,
+            aurora: false,
+            hangar: false,
+            ship: false,
+          };
+
+      if (continuePlay) this.inventory.load(save.inventory);
+      else this.inventory.reset();
+
+      const planetKey = String(this.planetIndex);
+      const planet =
+        (continuePlay && (save.planets?.[planetKey] || save.planets?.[this.planetIndex])) || {
+          seed: save.homeSeed,
+          harvested: [],
+          buildings: [],
+          ships: [],
         };
 
-    if (continuePlay) this.inventory.load(save.inventory);
-    else this.inventory.reset();
+      this._setLoadProgress(0.45, "Построение рельефа и чанков…");
+      await this._yieldPaint();
 
-    const planetKey = String(this.planetIndex);
-    const planet =
-      (continuePlay && (save.planets?.[planetKey] || save.planets?.[this.planetIndex])) || {
-        seed: save.homeSeed,
-        harvested: [],
-        buildings: [],
-        ships: [],
-      };
+      this._bootPlanet(planet.seed ?? save.homeSeed, {
+        harvested: continuePlay ? planet.harvested || [] : [],
+        explored: continuePlay ? planet.explored || [] : [],
+        buildings: continuePlay ? planet.buildings || [] : [],
+        ships: continuePlay ? planet.ships || [] : [],
+        playerState: continuePlay ? save.player : null,
+        showIntro: !continuePlay || !save.played,
+      });
 
-    this._bootPlanet(planet.seed ?? save.homeSeed, {
-      harvested: continuePlay ? planet.harvested || [] : [],
-      explored: continuePlay ? planet.explored || [] : [],
-      buildings: continuePlay ? planet.buildings || [] : [],
-      ships: continuePlay ? planet.ships || [] : [],
-      playerState: continuePlay ? save.player : null,
-      showIntro: !continuePlay || !save.played,
-    });
+      this._setLoadProgress(0.85, "Синхронизация скафандра…");
+      await this._yieldPaint();
 
-    const next = loadSave() || save;
-    next.played = true;
-    next.mode = "planet";
-    next.planetIndex = this.planetIndex;
-    next.inventory = this.inventory.serialize();
-    writeSave(next);
-    this.refreshMenu();
+      const next = loadSave() || save;
+      next.played = true;
+      next.mode = "planet";
+      next.planetIndex = this.planetIndex;
+      next.inventory = this.inventory.serialize();
+      writeSave(next);
+
+      this._setLoadProgress(1, continuePlay ? "Возвращение на поверхность…" : "Высадка…");
+      await new Promise((r) => setTimeout(r, 280));
+    } finally {
+      this.entering = false;
+      this._hideLoading();
+      this.refreshMenu();
+    }
   }
 
   _bootPlanet(seed, { harvested = [], explored = [], buildings = [], ships = [], playerState = null, showIntro = false } = {}) {
@@ -765,7 +820,7 @@ export class Game {
     for (const m of this.spaceMarkers) m.rotation.y += 0.003;
   }
 
-  _landOnNearestPlanet() {
+  async _landOnNearestPlanet() {
     if (this.spaceMarkers.length === 0) return;
     let best = this.spaceMarkers[0];
     let bestD = best.position.distanceTo(this.player.position);
@@ -794,6 +849,13 @@ export class Game {
       buildings: [],
       ships: [],
     };
+
+    this.entering = true;
+    this._showLoading(this.worldName || `Планета #${nextPlanet}`, false);
+    this._setLoadProgress(0.3, "Снижение на орбиту…");
+    await this._yieldPaint();
+    this._setLoadProgress(0.6, "Построение поверхности…");
+    await this._yieldPaint();
     this._bootPlanet(seed, {
       harvested: planet.harvested || [],
       explored: planet.explored || [],
@@ -802,6 +864,10 @@ export class Game {
       playerState: null,
       showIntro: false,
     });
+    this._setLoadProgress(1, "Касание грунта…");
+    await new Promise((r) => setTimeout(r, 220));
+    this.entering = false;
+    this._hideLoading();
   }
 
   _clearSpaceMarkers() {

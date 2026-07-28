@@ -489,6 +489,80 @@ html, body, #app {
   background: rgba(143, 163, 192, 0.35);
 }
 
+/* ——— World enter loading ——— */
+.world-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(20, 60, 90, 0.35), transparent 55%),
+    rgba(2, 6, 12, 0.88);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.world-loading-inner {
+  width: min(420px, 88vw);
+  text-align: center;
+  animation: rise-in 0.45s ease-out both;
+}
+
+.world-loading-kicker {
+  font-size: 0.68rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 0.75rem;
+}
+
+.world-loading-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  letter-spacing: -0.02em;
+  margin-bottom: 1.4rem;
+}
+
+.world-loading-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 0.9rem;
+}
+
+.world-loading-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0.08);
+  background: linear-gradient(90deg, #3d9cff, #7ef0d4);
+  transition: transform 0.35s ease;
+  animation: load-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes load-shimmer {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+
+.world-loading-status {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  color: rgba(220, 235, 255, 0.85);
+  min-height: 1.4em;
+}
+
+.world-loading-name {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: rgba(143, 163, 192, 0.65);
+}
+
 /* Legacy overlay panels (complete etc.) */
 .overlay {
   position: absolute;
