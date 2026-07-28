@@ -37,7 +37,44 @@ function fbm(x, z) {
 export function getHeight(x, z, seed = 42) {
   const ox = seed * 0.13;
   const oz = seed * 0.29;
-  return (fbm(x * 0.04 + ox, z * 0.04 + oz) * 2 - 1) * CONST.TERRAIN_HEIGHT;
+  let h = (fbm(x * 0.04 + ox, z * 0.04 + oz) * 2 - 1) * CONST.TERRAIN_HEIGHT;
+
+  // River carve — winding channel
+  const riverN = noise2(x * 0.012 + ox, z * 0.012 + oz);
+  const riverDist = Math.abs(riverN - 0.52);
+  if (riverDist < 0.045) {
+    const depth = (1 - riverDist / 0.045) * 3.2;
+    h -= depth;
+  }
+
+  // Starter lake basin near spawn
+  const ldx = x + 8;
+  const ldz = z - 16;
+  const lakeR = 9;
+  const lakeD = ldx * ldx + ldz * ldz;
+  if (lakeD < lakeR * lakeR) {
+    const t = 1 - Math.sqrt(lakeD) / lakeR;
+    h = Math.min(h, CONST.WATER_LEVEL - 0.6 - t * 1.8);
+  }
+
+  // Coastal sea — far positive X slopes into ocean
+  if (x > 55) {
+    const coast = Math.min(1, (x - 55) / 40);
+    h -= coast * 6;
+  }
+
+  return h;
+}
+
+export function isWaterCell(x, z, seed = 42) {
+  return getHeight(x, z, seed) < CONST.WATER_LEVEL;
+}
+
+export function waterBodyLabel(x, z, seed = 42) {
+  if (x > 70) return "Море";
+  const riverN = noise2(x * 0.012 + seed * 0.13, z * 0.012 + seed * 0.29);
+  if (Math.abs(riverN - 0.52) < 0.05) return "Река";
+  return "Озеро";
 }
 
 function makeTerrainMaterial(tex) {
@@ -46,6 +83,18 @@ function makeTerrainMaterial(tex) {
     roughness: 0.92,
     metalness: 0.04,
     flatShading: false,
+  });
+}
+
+function makeWaterMaterial(tex) {
+  return new THREE.MeshStandardMaterial({
+    map: tex.water,
+    color: 0x7ec8ff,
+    roughness: 0.12,
+    metalness: 0.25,
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
   });
 }
 
@@ -103,6 +152,7 @@ export class ChunkWorld {
     this.spawn = new THREE.Vector3(0, 0, 0);
     this.textures = new TextureLibrary();
     this.terrainMat = makeTerrainMaterial(this.textures);
+    this.waterMat = makeWaterMaterial(this.textures);
     this._sky();
   }
 
@@ -116,6 +166,8 @@ export class ChunkWorld {
   }
 
   _tryAddResource(id, x, z, nodes = null) {
+    if (id === ItemId.WATER) return null;
+    if (isWaterCell(x, z, this.seed)) return null;
     const key = resourceKey(id, x, z);
     if (this.harvested.has(key)) return null;
     const y = getHeight(x, z, this.seed);
@@ -125,6 +177,68 @@ export class ChunkWorld {
     if (nodes) nodes.push(node);
     if (id === ItemId.WRECK_PART) this.wreckage.push(node);
     return node;
+  }
+
+  _addWaterSurface(cx, cz) {
+    const size = CONST.CHUNK_SIZE;
+    const step = 2;
+    const ox = cx * size;
+    const oz = cz * size;
+    const positions = [];
+    const indices = [];
+    let vi = 0;
+    let wet = 0;
+    const sampleLabel = { x: 0, z: 0 };
+
+    for (let z = 0; z < size; z += step) {
+      for (let x = 0; x < size; x += step) {
+        const wx = ox + x + step * 0.5;
+        const wz = oz + z + step * 0.5;
+        if (!isWaterCell(wx, wz, this.seed)) continue;
+        wet++;
+        sampleLabel.x = wx;
+        sampleLabel.z = wz;
+        const y = CONST.WATER_LEVEL;
+        const x0 = ox + x;
+        const z0 = oz + z;
+        const x1 = x0 + step;
+        const z1 = z0 + step;
+        positions.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1);
+        indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+        vi += 4;
+      }
+    }
+
+    if (wet === 0) return null;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    // Simple UVs for water texture
+    const uvs = [];
+    for (let i = 0; i < positions.length / 3; i++) {
+      uvs.push((positions[i * 3] * 0.08) % 1, (positions[i * 3 + 2] * 0.08) % 1);
+    }
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+
+    const mesh = new THREE.Mesh(geo, this.waterMat.clone());
+    mesh.receiveShadow = true;
+    const label = waterBodyLabel(sampleLabel.x, sampleLabel.z, this.seed);
+    mesh.userData = {
+      kind: "resource",
+      itemId: ItemId.WATER,
+      key: `water:${cx},${cz}`,
+      drop: 2,
+      hp: 50,
+      maxHp: 50,
+      infinite: true,
+      waterBody: label,
+      displayName: label,
+    };
+    this.group.add(mesh);
+    this.resources.push(mesh);
+    return mesh;
   }
 
   key(cx, cz) {
@@ -175,13 +289,14 @@ export class ChunkWorld {
       [ItemId.CLAY, 3, 0, 10],
       [ItemId.CLAY, -8, 0, 5],
       [ItemId.STONE, 6, 0, 3],
-      [ItemId.WATER, -3, 0, 12],
       [ItemId.FOOD, 10, 0, 2],
       [ItemId.SEEDS, 2, 0, -8],
       [ItemId.WRECK_PART, 12, 0, 12],
       [ItemId.WRECK_PART, -14, 0, 9],
     ];
     for (const [id, x, , z] of starters) {
+      // Don't place resources underwater
+      if (isWaterCell(x, z, this.seed)) continue;
       this._tryAddResource(id, x, z);
     }
   }
@@ -219,15 +334,20 @@ export class ChunkWorld {
     const colors = [];
     const ox = cx * size + size / 2;
     const oz = cz * size + size / 2;
-    for (let i = 0; i < pos.count; i++) {
+      for (let i = 0; i < pos.count; i++) {
       const lx = pos.getX(i);
       const lz = pos.getZ(i);
       const wx = ox + lx;
       const wz = oz + lz;
       const y = getHeight(wx, wz, this.seed);
       pos.setY(i, y);
+      const underwater = y < CONST.WATER_LEVEL;
       const t = THREE.MathUtils.clamp((y + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2), 0, 1);
-      colors.push(0.25 + t * 0.15, 0.45 + (1 - t) * 0.25, 0.22);
+      if (underwater) {
+        colors.push(0.35, 0.32, 0.22);
+      } else {
+        colors.push(0.25 + t * 0.15, 0.45 + (1 - t) * 0.25, 0.22);
+      }
     }
     geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
@@ -240,6 +360,9 @@ export class ChunkWorld {
     this.group.add(mesh);
 
     const nodes = [];
+    const water = this._addWaterSurface(cx, cz);
+    if (water) nodes.push(water);
+
     // Skip (0,0) dense spawn handled by starter
     if (!(cx === 0 && cz === 0)) {
       const count = 4 + ((hash2(cx + this.seed, cz) * 6) | 0);
@@ -248,6 +371,7 @@ export class ChunkWorld {
         const lz = (hash2(cz, i * 7 + cx) - 0.5) * size * 0.85;
         const wx = ox + lx;
         const wz = oz + lz;
+        if (isWaterCell(wx, wz, this.seed)) continue;
         const roll = hash2(wx * 0.1, wz * 0.1 + this.seed);
         let id = ItemId.WOOD;
         if (roll < 0.12) id = ItemId.WRECK_PART;
@@ -256,22 +380,28 @@ export class ChunkWorld {
         else if (roll < 0.5) id = ItemId.IRON;
         else if (roll < 0.58) id = ItemId.COPPER;
         else if (roll < 0.64) id = ItemId.SILICON;
-        else if (roll < 0.72) id = ItemId.FOOD;
-        else if (roll < 0.8) id = ItemId.WATER;
+        else if (roll < 0.74) id = ItemId.FOOD;
         else if (roll < 0.88) id = ItemId.SEEDS;
-        else if (roll < 0.94) id = ItemId.ORGANIC;
+        else id = ItemId.ORGANIC;
         this._tryAddResource(id, wx, wz, nodes);
       }
     }
 
-    this.chunks.set(this.key(cx, cz), { mesh, nodes });
+    this.chunks.set(this.key(cx, cz), { mesh, nodes, water });
   }
 
   _disposeChunk(k, chunk) {
     this.group.remove(chunk.mesh);
     chunk.mesh.geometry.dispose();
     chunk.mesh.material.dispose();
+    if (chunk.water) {
+      this.group.remove(chunk.water);
+      chunk.water.geometry?.dispose();
+      chunk.water.material?.dispose();
+      this.resources = this.resources.filter((r) => r !== chunk.water);
+    }
     for (const n of chunk.nodes) {
+      if (n === chunk.water) continue;
       this.group.remove(n);
       this.resources = this.resources.filter((r) => r !== n);
       this.wreckage = this.wreckage.filter((r) => r !== n);
@@ -400,8 +530,14 @@ export class ChunkWorld {
         if (u.walking) {
           const ang = Math.random() * Math.PI * 2;
           const rad = 2 + Math.random() * 7;
-          u.targetX = u.homeX + Math.cos(ang) * rad;
-          u.targetZ = u.homeZ + Math.sin(ang) * rad;
+          let tx = u.homeX + Math.cos(ang) * rad;
+          let tz = u.homeZ + Math.sin(ang) * rad;
+          if (isWaterCell(tx, tz, this.seed)) {
+            tx = u.homeX;
+            tz = u.homeZ;
+          }
+          u.targetX = tx;
+          u.targetZ = tz;
         }
       }
 
@@ -414,11 +550,17 @@ export class ChunkWorld {
           u.walking = false;
           u.stateTimer = 0.8 + Math.random() * 1.5;
         } else {
-          moving = true;
-          const step = Math.min(dist, u.speed * delta);
-          node.position.x += (dx / dist) * step;
-          node.position.z += (dz / dist) * step;
-          node.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;
+          const nx = node.position.x + (dx / dist) * Math.min(dist, u.speed * delta);
+          const nz = node.position.z + (dz / dist) * Math.min(dist, u.speed * delta);
+          if (!isWaterCell(nx, nz, this.seed)) {
+            moving = true;
+            node.position.x = nx;
+            node.position.z = nz;
+            node.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;
+          } else {
+            u.walking = false;
+            u.stateTimer = 0.5;
+          }
         }
       }
 

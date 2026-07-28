@@ -1,5 +1,5 @@
 import { CONST } from "./constants.js";
-import { getHeight } from "./world.js";
+import { getHeight, isWaterCell } from "./world.js";
 
 const CELL = 6;
 const VIEW_RANGE = 72;
@@ -91,11 +91,15 @@ export class Minimap {
       if (Math.abs(dx) > VIEW_RANGE + CELL || Math.abs(dz) > VIEW_RANGE + CELL) continue;
 
       const h = getHeight(wx, wz, seed);
-      const t = Math.max(0, Math.min(1, (h + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2)));
-      const g = 70 + Math.floor(t * 50);
-      const b = 55 + Math.floor((1 - t) * 40);
-      const r = 40 + Math.floor(t * 30);
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      if (h <  -1.2) {
+        ctx.fillStyle = "rgb(40,110,170)";
+      } else {
+        const t = Math.max(0, Math.min(1, (h + 10) / 20));
+        const g = 70 + Math.floor(t * 50);
+        const b = 55 + Math.floor((1 - t) * 40);
+        const r = 40 + Math.floor(t * 30);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+      }
 
       const sx = half + dx * scale;
       const sy = half + dz * scale;

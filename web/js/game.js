@@ -730,7 +730,10 @@ export class Game {
     const maxHp = node.userData.maxHp || 70;
     if (node.userData.hp == null) node.userData.hp = maxHp;
     const dropAmount = node.userData.drop || 1;
-    const itemName = ITEM_NAMES[node.userData.itemId] || "Ресурс";
+    const itemName =
+      node.userData.displayName ||
+      ITEM_NAMES[node.userData.itemId] ||
+      "Ресурс";
     const mult = gatherMultiplier(node.userData.itemId, this.inventory.equippedTool);
     const dmg = CONST.MINE_DAMAGE * mult * Math.max(delta * 4, 0.35);
     node.userData.hp -= dmg;
@@ -748,10 +751,12 @@ export class Game {
     this.audio.playMineHit();
     this.shake.add(0.035 / Math.max(mult, 0.35));
     this.particles?.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 8);
-    node.scale.setScalar(0.92);
-    setTimeout(() => {
-      if (node.parent && node.userData.hp > 0) node.scale.setScalar(1);
-    }, 50);
+    if (!node.userData.infinite) {
+      node.scale.setScalar(0.92);
+      setTimeout(() => {
+        if (node.parent && node.userData.hp > 0) node.scale.setScalar(1);
+      }, 50);
+    }
 
     if (node.userData.hp <= 0) {
       const itemId = node.userData.itemId;
@@ -759,13 +764,24 @@ export class Game {
       this.shake.add(0.1);
       this.particles?.spawn(hit.point, ITEM_COLORS[itemId] || 0xffffff, 16);
       const got = this.inventory.addItem(itemId, dropAmount);
-      this._removeResourceNode(node);
       this.miningTarget = null;
       this.ui.setCrosshairMining(false);
-      this.ui.showLootToast(itemName, got || dropAmount);
+      this.ui.showLootToast(
+        itemId === ItemId.WATER ? "Вода" : itemName,
+        got || dropAmount
+      );
+      if (node.userData.infinite) {
+        node.userData.hp = node.userData.maxHp || 50;
+      } else {
+        this._removeResourceNode(node);
+      }
       if (!this.triggers.mine) {
         this.triggers.mine = true;
         this.ui.showEva(EVA_MESSAGES.firstMine);
+      }
+      if (itemId === ItemId.WATER && !this.triggers.water) {
+        this.triggers.water = true;
+        this.ui.showEva("Воду можно снова набрать из озера, реки или моря. С лопатой быстрее.", 6);
       }
     }
   }
