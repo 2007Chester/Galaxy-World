@@ -2,93 +2,100 @@
 
 **Build. Explore. Survive. Reach the Stars.**
 
-Вертикальный срез космической песочницы от первого лица на Godot 4: процедурная планета, выживание в скафандре, добыча ресурсов, крафт, строительство базы и помощник EVA.
+Космическая песочница: процедурная планета, выживание, добыча, крафт, база и EVA.
 
-## Требования
+Доступны две версии:
 
-- macOS 12+
-- [Godot 4.3+](https://godotengine.org/download)
+1. **Браузер** (Three.js) — быстрый запуск без установки движка
+2. **Godot 4** — нативный прототип для macOS / desktop
 
-## Установка Godot на macOS
+---
 
-```bash
-brew install --cask godot
-```
+## Браузерная версия (рекомендуется)
 
-Или скачайте Godot 4 с официального сайта и поместите в `/Applications`.
-
-## Запуск
-
-1. Откройте папку проекта в Godot: **Import** → выберите `project.godot`
-2. Нажмите **F5** (Play) или кнопку Run
-3. В главном меню выберите **New Game**
-
-Из терминала (если `godot` в PATH):
+### Запуск
 
 ```bash
 cd "/Users/annaivannikova/Yandex.Disk.localized/MacBook Air/Project/Galaxy World"
-godot --path . res://scenes/ui/main_menu.tscn
+python3 serve_web.py
 ```
 
-## Тесты
+Откройте в браузере: [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
 
-Запуск unit-тестов (headless):
+Или любой статический сервер из папки `web/`:
 
 ```bash
-./run_tests.sh
+cd web && python3 -m http.server 8080
 ```
 
-Или напрямую:
+> Нужен локальный сервер: браузер блокирует ES-модули с `file://`.
 
-```bash
-godot --headless --path . -s res://tests/run_tests.gd
-```
-
-Тесты покрывают: инвентарь, крафт, стоимость построек, генератор планеты, GameManager, EventBus, сохранения.
-
-## Управление
+### Управление
 
 | Клавиша | Действие |
 |---------|----------|
 | WASD | Движение |
 | Shift | Спринт |
 | Пробел | Прыжок |
-| Мышь | Обзор |
-| ЛКМ | Добыча ресурсов / размещение постройки |
-| E | Взаимодействие с обломками |
+| Мышь / клик | Обзор (pointer lock) |
+| ЛКМ | Добыча / размещение постройки |
+| E | Обломки Aurora |
 | Tab | Инвентарь |
 | C | Крафт |
-| B | Режим строительства |
-| 1–5 | Выбор модуля базы (в режиме строительства) |
-| Esc | Освободить / захватить курсор |
+| B | Строительство |
+| 1–5 | Выбор модуля |
+| Esc | Отпустить мышь |
 
-## Игровой цикл
+### Игровой цикл
 
-1. Проснитесь в аварийной капсуле на неизвестной планете
-2. Добывайте ресурсы (камень, железо, медь, кремний, органика)
-3. Крафтите Metal Plate, Wire, Circuit, Generator
-4. Стройте модули базы (Foundation, Habitat, Generator и др.)
-5. Подойдите к ядру Aurora и завершите вертикальный срез
+1. New Game → капсула на зелёной планете  
+2. Добыча Stone / Iron / Copper / Silicon / Organic  
+3. Крафт Metal Plate → Wire → Circuit → Generator  
+4. Строительство Habitat / Generator (O2 в радиусе 10 м)  
+5. Ядро Aurora → Vertical Slice Complete  
 
-## Структура проекта
+Файлы: `web/index.html`, `web/js/*`, `web/css/style.css`
+
+---
+
+## Godot 4 (desktop)
+
+### Требования
+
+- macOS 12+
+- [Godot 4.3+](https://godotengine.org/download)
+
+### Запуск
+
+1. Откройте `project.godot` в Godot  
+2. **F5** → **New Game**
+
+```bash
+godot --path . res://scenes/ui/main_menu.tscn
+```
+
+### Тесты (Godot)
+
+```bash
+./run_tests.sh
+```
+
+---
+
+## Структура
 
 ```
-scenes/          # Сцены Godot
-scripts/         # GDScript (autoload, player, world, UI, building)
-resources/       # Ресурсы предметов и рецептов
+web/                 # Браузерная игра (Three.js)
+scenes/ scripts/     # Godot-версия
+resources/           # Предметы Godot
+tests/               # Unit-тесты Godot
+serve_web.py         # Локальный сервер для браузера
 ```
 
-## Autoload-синглтоны
-
-- `GameManager` — состояние игры
-- `EventBus` — события и EVA-триггеры
-- `InventorySystem` — инвентарь
-- `CraftingSystem` — крафт и стоимость построек
-- `SaveSystem` — заглушка сохранений
-
-## Следующий этап (фаза 2)
+## Следующий этап
 
 - Орбита и шаттл L1
 - Вторая планета
 - Save/Load
 - Звук и улучшенная графика
+- Godot HTML5 export (опционально)

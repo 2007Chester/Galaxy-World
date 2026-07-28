@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaxy World</title>
+  <meta name="description" content="Galaxy World — Build. Explore. Survive. Reach the Stars." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='16' fill='%230a1628'/%3E%3Ccircle cx='64' cy='64' r='28' fill='%233d8bfd'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="main-menu" class="overlay panel-center">
+      <div class="menu-card">
+        <p class="eyebrow">Unknown Sector-7</p>
+        <h1>Galaxy World</h1>
+        <p class="tagline">Build. Explore. Survive. Reach the Stars.</p>
+        <button id="btn-start" class="btn primary">New Game</button>
+        <p class="hint">Кликните по экрану, чтобы захватить мышь</p>
+      </div>
+    </div>
+
+    <div id="hud" class="hidden">
+      <div class="bars">
+        <div class="bar-row"><span>O2</span><div class="bar"><i id="bar-o2"></i></div></div>
+        <div class="bar-row"><span>Energy</span><div class="bar energy"><i id="bar-energy"></i></div></div>
+        <div class="bar-row"><span>Health</span><div class="bar health"><i id="bar-health"></i></div></div>
+        <div class="bar-row"><span>Temp</span><strong id="temp-value">22°C</strong></div>
+      </div>
+      <div id="crosshair">+</div>
+      <div id="hint-label">WASD — движение | ЛКМ — добыча | E — взаимодействие | Tab — инвентарь | C — крафт | B — строительство</div>
+      <div id="eva-box" class="hidden"><strong>EVA:</strong> <span id="eva-text"></span></div>
+    </div>
+
+    <div id="inventory-panel" class="side-panel left hidden">
+      <h2>Inventory (Tab)</h2>
+      <div id="inventory-slots" class="slots"></div>
+    </div>
+
+    <div id="craft-panel" class="side-panel right hidden">
+      <h2>Crafting (C)</h2>
+      <div id="recipe-list"></div>
+      <p id="craft-status">Выберите рецепт</p>
+      <button id="btn-craft" class="btn">Craft</button>
+    </div>
+
+    <div id="build-panel" class="side-panel bottom hidden">
+      <h2>Строительство (B) — клавиши 1–5</h2>
+      <div id="build-list" class="build-list"></div>
+    </div>
+
+    <div id="complete-panel" class="overlay panel-center hidden">
+      <div class="menu-card">
+        <h2>Vertical Slice Complete!</h2>
+        <p>Вы нашли ядро Aurora. Галактика ждёт.</p>
+        <button id="btn-menu" class="btn primary">В меню</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -6,17 +6,20 @@ extends CharacterBody3D
 @onready var interact_ray: RayCast3D = $Camera3D/InteractRay
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var _mouse_captured := true
+var _mouse_captured := false
 
 func _ready() -> void:
 	add_to_group("player")
 	collision_layer = GWConstants.LAYER_PLAYER
 	collision_mask = GWConstants.LAYER_WORLD | GWConstants.LAYER_RESOURCE | GWConstants.LAYER_BUILDING
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Browser requires a user gesture before pointer lock.
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if GameManager.spawn_position != Vector3.ZERO:
 		global_position = GameManager.spawn_position + Vector3(0, 1.5, 0)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and not _mouse_captured:
+		_capture_mouse()
 	if event is InputEventMouseMotion and _mouse_captured:
 		rotate_y(-event.relative.x * GWConstants.MOUSE_SENSITIVITY)
 		camera.rotate_x(-event.relative.y * GWConstants.MOUSE_SENSITIVITY)
@@ -26,8 +29,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			_mouse_captured = false
 		else:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-			_mouse_captured = true
+			_capture_mouse()
+
+func _capture_mouse() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_mouse_captured = true
 
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
