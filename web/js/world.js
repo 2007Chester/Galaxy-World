@@ -82,10 +82,7 @@ function createResourceNode(itemId, x, y, z) {
     targetZ: z + (Math.random() - 0.5) * 6,
   };
   group.traverse((c) => {
-    if (c.isMesh) {
-      c.castShadow = true;
-      c.userData = group.userData;
-    }
+    if (c.isMesh) c.castShadow = true;
   });
   return group;
 }

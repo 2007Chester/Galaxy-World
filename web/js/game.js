@@ -639,11 +639,12 @@ export class Game {
 
   _findGameObject(obj) {
     let o = obj;
+    let best = null;
     while (o) {
-      if (o.userData?.kind) return o;
+      if (o.userData?.kind) best = o;
       o = o.parent;
     }
-    return obj;
+    return best || obj;
   }
 
   _getLookTargets(range) {
