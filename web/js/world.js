@@ -47,6 +47,10 @@ function makeTerrainMaterial() {
   });
 }
 
+function resourceKey(itemId, x, z) {
+  return `${itemId}:${x.toFixed(1)}:${z.toFixed(1)}`;
+}
+
 function createResourceNode(itemId, x, y, z) {
   const group = new THREE.Group();
   const color = ITEM_COLORS[itemId] || 0x888888;
@@ -72,7 +76,6 @@ function createResourceNode(itemId, x, y, z) {
     mesh.position.y = 0.25;
     group.add(mesh);
   } else if (itemId === ItemId.FOOD) {
-    // Simple animal
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.25, 0.5, 4, 8),
       new THREE.MeshStandardMaterial({ color: 0xc4a484 })
@@ -127,9 +130,11 @@ function createResourceNode(itemId, x, y, z) {
     group.add(mesh);
   }
   group.position.set(x, y, z);
+  const key = resourceKey(itemId, x, z);
   group.userData = {
     kind: "resource",
     itemId,
+    key,
     drop: itemId === ItemId.WRECK_PART ? 1 : 2 + ((Math.abs(x * 10) | 0) % 3),
     hp: 70,
     maxHp: 70,
@@ -155,9 +160,31 @@ export class ChunkWorld {
     this.wreckage = [];
     this.ships = [];
     this.hangars = [];
+    this.harvested = new Set();
     this.spawn = new THREE.Vector3(0, 0, 0);
     this.terrainMat = makeTerrainMaterial();
     this._sky();
+  }
+
+  setHarvested(keys = []) {
+    this.harvested = new Set(keys);
+  }
+
+  markHarvested(node) {
+    const key = node?.userData?.key;
+    if (key) this.harvested.add(key);
+  }
+
+  _tryAddResource(id, x, z, nodes = null) {
+    const key = resourceKey(id, x, z);
+    if (this.harvested.has(key)) return null;
+    const y = getHeight(x, z, this.seed);
+    const node = createResourceNode(id, x, y, z);
+    this.group.add(node);
+    this.resources.push(node);
+    if (nodes) nodes.push(node);
+    if (id === ItemId.WRECK_PART) this.wreckage.push(node);
+    return node;
   }
 
   key(cx, cz) {
@@ -215,11 +242,7 @@ export class ChunkWorld {
       [ItemId.WRECK_PART, -14, 0, 9],
     ];
     for (const [id, x, , z] of starters) {
-      const y = getHeight(x, z, this.seed);
-      const node = createResourceNode(id, x, y, z);
-      this.group.add(node);
-      this.resources.push(node);
-      if (id === ItemId.WRECK_PART) this.wreckage.push(node);
+      this._tryAddResource(id, x, z);
     }
   }
 
@@ -285,7 +308,6 @@ export class ChunkWorld {
         const lz = (hash2(cz, i * 7 + cx) - 0.5) * size * 0.85;
         const wx = ox + lx;
         const wz = oz + lz;
-        const wy = getHeight(wx, wz, this.seed);
         const roll = hash2(wx * 0.1, wz * 0.1 + this.seed);
         let id = ItemId.WOOD;
         if (roll < 0.12) id = ItemId.WRECK_PART;
@@ -298,11 +320,7 @@ export class ChunkWorld {
         else if (roll < 0.8) id = ItemId.WATER;
         else if (roll < 0.88) id = ItemId.SEEDS;
         else if (roll < 0.94) id = ItemId.ORGANIC;
-        const node = createResourceNode(id, wx, wy, wz);
-        this.group.add(node);
-        this.resources.push(node);
-        nodes.push(node);
-        if (id === ItemId.WRECK_PART) this.wreckage.push(node);
+        this._tryAddResource(id, wx, wz, nodes);
       }
     }
 
@@ -409,6 +427,34 @@ export class ChunkWorld {
     const a = t * 0.04;
     this.sun.position.set(Math.cos(a) * 55, 35 + Math.sin(a) * 40, Math.sin(a) * 55);
     this.sun.intensity = 0.65 + Math.max(Math.sin(a), 0) * 0.7;
+  }
+
+  serializePlanet() {
+    return {
+      seed: this.seed,
+      harvested: [...this.harvested],
+      buildings: this.buildings.map((b) => ({
+        id: b.userData.buildingId,
+        x: b.position.x,
+        y: b.position.y,
+        z: b.position.z,
+      })),
+      ships: this.ships.map((s) => ({
+        x: s.position.x,
+        y: s.position.y,
+        z: s.position.z,
+      })),
+    };
+  }
+
+  restoreStructures(state) {
+    if (!state) return;
+    for (const b of state.buildings || []) {
+      this.addBuilding(b.id, { x: b.x, y: b.y, z: b.z });
+    }
+    for (const s of state.ships || []) {
+      this.addShip({ x: s.x, y: s.y, z: s.z });
+    }
   }
 
   dispose() {

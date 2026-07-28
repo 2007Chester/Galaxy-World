@@ -123,6 +123,7 @@ export class UI {
     this.buildPanel.classList.add("hidden");
     this.completePanel.classList.add("hidden");
     this.vignette?.classList.add("hidden");
+    this.refreshSaveMenu?.();
   }
 
   showGame() {
@@ -154,7 +155,7 @@ export class UI {
         "Мышь свободна: клик по модулю или 1–8. ЛКМ по миру — поставить. Esc — закрыть";
     } else {
       this.hint.textContent =
-        "WASD | Shift бег | ЛКМ добыча | E ангар/заправка | F корабль/космос | Tab инвентарь | C крафт | B стройка";
+        "WASD | Shift бег | ЛКМ добыча | E ангар | F корабль | Esc/M меню | Tab инвентарь | C крафт | B стройка";
     }
     this.syncPointerLock();
   }

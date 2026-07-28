@@ -125,4 +125,29 @@ export class Inventory {
         itemId: s.itemId,
       }));
   }
+
+  serialize() {
+    return {
+      slots: this.slots.map((s) => ({ itemId: s.itemId, amount: s.amount })),
+      equippedTool: this.equippedTool,
+      tankLevel: this.tankLevel,
+    };
+  }
+
+  load(data) {
+    if (!data) {
+      this.reset();
+      return;
+    }
+    this.slots = Array.from({ length: CONST.INVENTORY_SLOTS }, (_, i) => {
+      const s = data.slots?.[i];
+      return {
+        itemId: s?.itemId ?? -1,
+        amount: s?.amount ?? 0,
+      };
+    });
+    this.equippedTool = data.equippedTool ?? -1;
+    this.tankLevel = data.tankLevel ?? 0;
+    this.emit();
+  }
 }

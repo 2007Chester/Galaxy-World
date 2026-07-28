@@ -21,12 +21,28 @@
     <canvas id="game-canvas"></canvas>
 
     <div id="main-menu" class="overlay panel-center">
-      <div class="menu-card">
+      <div class="menu-card menu-card-wide">
         <p class="eyebrow">Unknown Sector-7</p>
         <h1>Galaxy World</h1>
         <p class="tagline">Build. Explore. Survive. Reach the Stars.</p>
-        <button id="btn-start" class="btn primary">New Game</button>
-        <p class="hint">Кликните по экрану, чтобы захватить мышь</p>
+
+        <div class="world-gen">
+          <label class="world-label" for="world-name">Имя мира</label>
+          <input id="world-name" type="text" maxlength="24" placeholder="Например: Aurora Outpost" autocomplete="off" />
+          <div class="gen-progress hidden" id="gen-progress">
+            <div class="gen-bar"><i id="gen-bar-fill"></i></div>
+            <p id="gen-status">Генерация сектора…</p>
+          </div>
+          <p id="save-summary" class="save-summary">Мир ещё не сгенерирован</p>
+        </div>
+
+        <div class="menu-actions">
+          <button id="btn-generate" class="btn primary">Сгенерировать мир</button>
+          <button id="btn-enter" class="btn" disabled>Войти в мир</button>
+          <button id="btn-continue" class="btn" disabled>Продолжить</button>
+          <button id="btn-delete-save" class="btn danger" disabled>Удалить сохранение</button>
+        </div>
+        <p class="hint">Сначала сгенерируйте мир — он сохранится в браузере. Потом можно войти и продолжить позже.</p>
       </div>
     </div>
 
@@ -50,7 +66,7 @@
         <span class="ch-line ch-right"></span>
         <span class="ch-dot"></span>
       </div>
-      <div id="hint-label">WASD | Shift бег | ЛКМ добыча | E ангар/заправка | F корабль/космос | Tab инвентарь | C крафт | B стройка</div>
+      <div id="hint-label">WASD | Shift бег | ЛКМ добыча | E ангар | F корабль | Esc/M меню (сохранение) | Tab инвентарь | C крафт | B стройка</div>
       <div id="eva-box" class="hidden">
         <div class="eva-header"><span class="eva-badge">EVA</span><span class="eva-channel">COMMS // UNKNOWN SECTOR</span></div>
         <p id="eva-text"></p>

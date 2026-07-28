@@ -17,6 +17,13 @@ import { Crafting } from "./crafting.js";
 import { CameraShake, ParticleBurst } from "./effects.js";
 import { Inventory } from "./inventory.js";
 import { Player } from "./player.js";
+import {
+  clearSave,
+  createNewWorldSave,
+  formatSaveSummary,
+  loadSave,
+  writeSave,
+} from "./save.js";
 import { UI } from "./ui.js";
 import { World } from "./world.js";
 
@@ -44,9 +51,13 @@ export class Game {
     this.shake = new CameraShake();
     this.particles = null;
     this.miningTarget = null;
-    this.mode = "planet"; // planet | space
+    this.mode = "planet";
     this.planetIndex = 0;
+    this.homeSeed = null;
+    this.worldName = "";
     this.spaceMarkers = [];
+    this.saveTimer = 0;
+    this.generating = false;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -82,11 +93,12 @@ export class Game {
     this.preview = null;
 
     this._bindUI();
+    this.refreshMenu();
     window.addEventListener("resize", () => this._onResize());
     window.addEventListener("keydown", (e) => this._onKey(e));
     window.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest?.(".side-panel, .overlay, .menu-card, button, .slot, .recipe, .build-item")) {
+      if (e.target.closest?.(".side-panel, .overlay, .menu-card, button, .slot, .recipe, .build-item, input")) {
         return;
       }
       if (this.ui.isUiBlocking()) return;
@@ -95,10 +107,26 @@ export class Game {
     window.addEventListener("mouseup", (e) => {
       if (e.button === 0) this.mouse.down = false;
     });
+    window.addEventListener("beforeunload", () => {
+      if (this.playing) this.saveGame();
+    });
   }
 
   _bindUI() {
-    document.getElementById("btn-start").addEventListener("click", () => this.start());
+    this.btnGenerate = document.getElementById("btn-generate");
+    this.btnEnter = document.getElementById("btn-enter");
+    this.btnContinue = document.getElementById("btn-continue");
+    this.btnDelete = document.getElementById("btn-delete-save");
+    this.worldNameInput = document.getElementById("world-name");
+    this.saveSummary = document.getElementById("save-summary");
+    this.genProgress = document.getElementById("gen-progress");
+    this.genBarFill = document.getElementById("gen-bar-fill");
+    this.genStatus = document.getElementById("gen-status");
+
+    this.btnGenerate.addEventListener("click", () => this.generateWorld());
+    this.btnEnter.addEventListener("click", () => this.enterWorld(false));
+    this.btnContinue.addEventListener("click", () => this.enterWorld(true));
+    this.btnDelete.addEventListener("click", () => this.deleteWorld());
     document.getElementById("btn-menu").addEventListener("click", () => this.toMenu());
     document.getElementById("btn-craft").addEventListener("click", (e) => {
       e.preventDefault();
@@ -111,19 +139,136 @@ export class Game {
       this._refreshPreview();
     });
     this.ui.onEquipSlot = (index) => this._useInventorySlot(index);
+    this.ui.refreshSaveMenu = () => this.refreshMenu();
     this.inventory.onChange(() => {
       this.ui.updateInventory(this.inventory);
       this.player?.setOxygenCapacity(this.inventory.oxygenCapacity());
     });
   }
 
-  start(seed = (Math.random() * 1e9) | 0, { keepInventory = false, planetIndex = null } = {}) {
-    if (planetIndex != null) this.planetIndex = planetIndex;
-    if (!keepInventory) {
-      this.planetIndex = planetIndex != null ? planetIndex : 0;
-      this.inventory.reset();
+  refreshMenu() {
+    const data = loadSave();
+    if (this.saveSummary) this.saveSummary.textContent = formatSaveSummary(data);
+    const has = !!data;
+    const played = !!data?.played;
+    if (this.btnEnter) this.btnEnter.disabled = !has || this.generating;
+    if (this.btnContinue) this.btnContinue.disabled = !has || !played || this.generating;
+    if (this.btnDelete) this.btnDelete.disabled = !has || this.generating;
+    if (this.btnGenerate) this.btnGenerate.disabled = this.generating;
+    if (this.worldNameInput && data?.worldName && !this.worldNameInput.value) {
+      this.worldNameInput.value = data.worldName;
+    }
+  }
+
+  async generateWorld() {
+    if (this.generating) return;
+    const existing = loadSave();
+    if (existing?.played) {
+      const ok = confirm("Уже есть сохранение с прогрессом. Сгенерировать новый мир и удалить старый?");
+      if (!ok) return;
     }
 
+    this.generating = true;
+    this.refreshMenu();
+    this.genProgress?.classList.remove("hidden");
+    this.genBarFill.style.transform = "scaleX(0)";
+    const steps = [
+      "Сканирование сектора…",
+      "Построение рельефа…",
+      "Расстановка ресурсов…",
+      "Фиксация seed мира…",
+      "Сохранение в браузер…",
+    ];
+    for (let i = 0; i < steps.length; i++) {
+      this.genStatus.textContent = steps[i];
+      this.genBarFill.style.transform = `scaleX(${(i + 1) / steps.length})`;
+      await new Promise((r) => setTimeout(r, 280 + Math.random() * 220));
+    }
+
+    const save = createNewWorldSave({ name: this.worldNameInput?.value });
+    this.homeSeed = save.homeSeed;
+    this.worldName = save.worldName;
+    this.generating = false;
+    this.genStatus.textContent = `Мир «${save.worldName}» готов. Можно входить.`;
+    this.refreshMenu();
+    setTimeout(() => this.genProgress?.classList.add("hidden"), 1200);
+  }
+
+  deleteWorld() {
+    const data = loadSave();
+    if (!data) return;
+    if (!confirm(`Удалить мир «${data.worldName}»?`)) return;
+    clearSave();
+    if (this.worldNameInput) this.worldNameInput.value = "";
+    this.refreshMenu();
+  }
+
+  enterWorld(continuePlay) {
+    const data = loadSave();
+    if (!data) {
+      alert("Сначала сгенерируйте мир.");
+      return;
+    }
+    this.startFromSave(data, { continuePlay: !!continuePlay });
+  }
+
+  startFromSave(data, { continuePlay = false } = {}) {
+    let save = data;
+
+    // "Войти в мир" on already-played save: continue (same as Продолжить)
+    // Unless user wants fresh — only reset via generate with confirm
+    if (!continuePlay && data.played) {
+      const choice = confirm(
+        "В этом мире уже есть прогресс.\nOK — продолжить игру\nОтмена — остаться в меню"
+      );
+      if (!choice) return;
+      continuePlay = true;
+    }
+
+    this.homeSeed = save.homeSeed;
+    this.worldName = save.worldName;
+    this.planetIndex = continuePlay ? save.planetIndex ?? 0 : 0;
+    this.triggers = continuePlay
+      ? { ...save.triggers }
+      : {
+          mine: false,
+          craft: false,
+          build: false,
+          aurora: false,
+          hangar: false,
+          ship: false,
+        };
+
+    if (continuePlay) this.inventory.load(save.inventory);
+    else this.inventory.reset();
+
+    const planetKey = String(this.planetIndex);
+    const planet =
+      (continuePlay && (save.planets?.[planetKey] || save.planets?.[this.planetIndex])) || {
+        seed: save.homeSeed,
+        harvested: [],
+        buildings: [],
+        ships: [],
+      };
+
+    this._bootPlanet(planet.seed ?? save.homeSeed, {
+      harvested: continuePlay ? planet.harvested || [] : [],
+      buildings: continuePlay ? planet.buildings || [] : [],
+      ships: continuePlay ? planet.ships || [] : [],
+      playerState: continuePlay ? save.player : null,
+      showIntro: !continuePlay || !save.played,
+    });
+
+    const next = loadSave() || save;
+    next.played = true;
+    next.mode = "planet";
+    next.planetIndex = this.planetIndex;
+    next.inventory = this.inventory.serialize();
+    writeSave(next);
+    this.refreshMenu();
+  }
+
+  _bootPlanet(seed, { harvested = [], buildings = [], ships = [], playerState = null, showIntro = false } = {}) {
     if (this.world) this.world.dispose();
     if (this.preview) {
       this.scene.remove(this.preview);
@@ -132,8 +277,11 @@ export class Game {
     this._clearSpaceMarkers();
 
     this.world = new World(this.scene, seed);
+    this.world.setHarvested(harvested);
     this.world.build();
+    this.world.restoreStructures({ buildings, ships });
     this.particles = new ParticleBurst(this.scene);
+
     if (!this.player) {
       this.player = new Player(this.camera, this.world);
       this.player.bindInput(this.canvas);
@@ -144,20 +292,29 @@ export class Game {
       this.player.world = this.world;
       this.player.flying = false;
     }
+
     this.player.setOxygenCapacity(this.inventory.oxygenCapacity());
-    this.player.spawn();
-    this.triggers = {
-      mine: false,
-      craft: false,
-      build: false,
-      aurora: false,
-      hangar: false,
-      ship: false,
-    };
+    if (playerState?.position) {
+      this.player.spawn(
+        new THREE.Vector3(playerState.position.x, playerState.position.y, playerState.position.z)
+      );
+      this.player.yaw = playerState.yaw ?? 0;
+      this.player.pitch = playerState.pitch ?? 0;
+      if (playerState.stats) Object.assign(this.player.stats, playerState.stats);
+      this.player.setOxygenCapacity(this.inventory.oxygenCapacity());
+      this.player.stats.oxygen = Math.min(
+        this.player.o2Capacity,
+        playerState.stats?.oxygen ?? this.player.o2Capacity
+      );
+    } else {
+      this.player.spawn();
+    }
+
     this.buildMode = false;
     this.miningTarget = null;
     this.mode = "planet";
     this.playing = true;
+    this.saveTimer = 0;
     this.scene.background = new THREE.Color(0x0a1628);
     this.scene.fog = new THREE.Fog(0x0a1628, 50, 160);
     this.ui.showGame();
@@ -165,18 +322,59 @@ export class Game {
     this.ui.toggleInventory(false);
     this.ui.toggleCraft(false);
     this.ui.updateInventory(this.inventory);
-    this.ui.showEva(this.planetIndex === 0 ? EVA_MESSAGES.start : EVA_MESSAGES.newPlanet);
+    this.ui.showEva(showIntro ? EVA_MESSAGES.start : EVA_MESSAGES.newPlanet);
     this.audio.startAmbience();
     this.canvas.requestPointerLock?.();
+    this.saveGame();
+  }
+
+  saveGame() {
+    if (!this.playing || this.homeSeed == null) return;
+    const prev = loadSave() || createNewWorldSave({ name: this.worldName, seed: this.homeSeed });
+    const planets = { ...(prev.planets || {}) };
+
+    if (this.mode === "planet" && this.world?.serializePlanet) {
+      planets[String(this.planetIndex)] = this.world.serializePlanet();
+    }
+
+    writeSave({
+      ...prev,
+      worldName: this.worldName || prev.worldName,
+      homeSeed: this.homeSeed,
+      seed: this.world?.seed ?? prev.seed ?? this.homeSeed,
+      planetIndex: this.planetIndex,
+      mode: this.mode,
+      played: true,
+      inventory: this.inventory.serialize(),
+      player: this._serializePlayer(),
+      triggers: this.triggers,
+      planets,
+    });
+  }
+
+  _serializePlayer() {
+    if (!this.player) return null;
+    return {
+      position: {
+        x: this.player.position.x,
+        y: this.player.position.y,
+        z: this.player.position.z,
+      },
+      yaw: this.player.yaw,
+      pitch: this.player.pitch,
+      stats: { ...this.player.stats },
+    };
   }
 
   toMenu() {
+    if (this.playing) this.saveGame();
     this.playing = false;
     this.buildMode = false;
     this.miningTarget = null;
     document.exitPointerLock?.();
     this.audio.stopAmbience();
     this.ui.showMenu();
+    this.refreshMenu();
   }
 
   update() {
@@ -194,11 +392,17 @@ export class Game {
     this.player.update(delta, !blocked || this.ui.buildModeOpen());
 
     if (this.mode === "planet") {
-      this.world.updateChunks(this.player.position.x, this.player.position.z);
-      this.world.updateDayNight(this.clock.elapsedTime);
+      this.world.updateChunks?.(this.player.position.x, this.player.position.z);
+      this.world.updateDayNight?.(this.clock.elapsedTime);
       this._applyBuildingBuffs(delta);
     } else {
       this._updateSpace(delta);
+    }
+
+    this.saveTimer += delta;
+    if (this.saveTimer >= 12) {
+      this.saveTimer = 0;
+      this.saveGame();
     }
 
     this.ui.updateStats(this.player.stats, {
@@ -213,6 +417,7 @@ export class Game {
     if (this.player.isDead()) {
       this.player.spawn();
       this.ui.showEva("Системы скафандра перезапущены у точки высадки.");
+      this.saveGame();
     }
 
     if (this.buildMode && this.mode === "planet") {
@@ -236,6 +441,7 @@ export class Game {
   }
 
   _applyBuildingBuffs(delta) {
+    if (!this.world?.buildings) return;
     for (const b of this.world.buildings) {
       const id = b.userData.buildingId;
       const dist = b.position.distanceTo(this.player.position);
@@ -247,7 +453,6 @@ export class Game {
         this.player.applyGeneratorO2(rate * delta);
       }
       if (id === BuildingId.FARM_PLOT && dist < 4) {
-        // Passive food trickle while near farm
         if (Math.random() < delta * 0.15) this.inventory.addItem(ItemId.FOOD, 1);
       }
     }
@@ -312,6 +517,10 @@ export class Game {
     if (e.code === "KeyE" && !this.ui.isUiBlocking()) this._tryInteract();
     if (e.code === "KeyF" && !this.ui.isUiBlocking()) this._tryShip();
     if (e.code === "KeyG" && this.mode === "space") this._landOnNearestPlanet();
+    if (e.code === "KeyM") {
+      this.toMenu();
+      return;
+    }
     if (e.code === "Escape") {
       if (this.ui.isUiBlocking() && this.ui.mainMenu.classList.contains("hidden")) {
         this.ui.toggleInventory(false);
@@ -325,6 +534,8 @@ export class Game {
           }
         }
         this.canvas.requestPointerLock?.();
+      } else if (!this.ui.isUiBlocking()) {
+        this.toMenu();
       } else {
         document.exitPointerLock?.();
       }
@@ -343,6 +554,7 @@ export class Game {
       if (recipe.outputId === ItemId.SHIP_KIT) {
         this.ui.showEva("Набор корабля готов. Подойдите к ангару и нажмите E.", 6);
       }
+      this.saveGame();
     } else {
       this.ui.craftStatus.textContent = "Недостаточно ресурсов";
     }
@@ -362,9 +574,9 @@ export class Game {
     this.raycaster.set(origin, dir);
     this.raycaster.far = range;
     const targets = [
-      ...this.world.resources,
-      ...this.world.buildings,
-      ...this.world.ships,
+      ...(this.world.resources || []),
+      ...(this.world.buildings || []),
+      ...(this.world.ships || []),
     ];
     return this.raycaster.intersectObjects(targets, true);
   }
@@ -400,6 +612,7 @@ export class Game {
       this.shake.add(0.1);
       this.particles?.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 16);
       this.inventory.addItem(node.userData.itemId, node.userData.drop);
+      this.world.markHarvested?.(node);
       this.world.group.remove(node);
       this.world.resources = this.world.resources.filter((r) => r !== node);
       this.world.wreckage = this.world.wreckage.filter((r) => r !== node);
@@ -426,6 +639,7 @@ export class Game {
         this.world.addShip(p);
         this.triggers.ship = true;
         this.ui.showEva(EVA_MESSAGES.shipReady, 8);
+        this.saveGame();
       } else if (!this.triggers.hangar) {
         this.triggers.hangar = true;
         this.ui.showEva(EVA_MESSAGES.hangar, 8);
@@ -463,6 +677,7 @@ export class Game {
       }
       return;
     }
+    this.saveGame();
     this._enterSpace();
   }
 
@@ -521,10 +736,10 @@ export class Game {
     this.player.flying = true;
     this.player.position.set(0, 5, 30);
     this.ui.showEva("Космос. Летите к планете (WASD/Space/Ctrl) и нажмите G или F для посадки.", 8);
+    this.saveGame();
   }
 
   _updateSpace() {
-    // gentle marker spin
     for (const m of this.spaceMarkers) m.rotation.y += 0.003;
   }
 
@@ -546,9 +761,22 @@ export class Game {
     const nextPlanet = best.userData.planetId;
     this.player.flying = false;
     this._clearSpaceMarkers();
-    this.start((nextPlanet * 9973 + 42) >>> 0, {
-      keepInventory: true,
-      planetIndex: nextPlanet,
+    this.planetIndex = nextPlanet;
+    const seed = (nextPlanet * 9973 + 42) >>> 0;
+    const prev = loadSave() || {};
+    const planetKey = String(nextPlanet);
+    const planet = prev.planets?.[planetKey] || {
+      seed,
+      harvested: [],
+      buildings: [],
+      ships: [],
+    };
+    this._bootPlanet(seed, {
+      harvested: planet.harvested || [],
+      buildings: planet.buildings || [],
+      ships: planet.ships || [],
+      playerState: null,
+      showIntro: false,
     });
   }
 
@@ -601,6 +829,7 @@ export class Game {
     if (this.selectedBuilding === BuildingId.HANGAR) {
       this.ui.showEva(EVA_MESSAGES.hangar, 8);
     }
+    this.saveGame();
   }
 
   _onResize() {
