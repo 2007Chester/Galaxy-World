@@ -227,25 +227,40 @@ export class Game {
     }
   }
 
+  _findGameObject(obj) {
+    let cur = obj;
+    while (cur) {
+      const d = cur.userData;
+      if (d?.maxHp !== undefined || d?.looted !== undefined || d?.buildingId !== undefined) {
+        return cur;
+      }
+      cur = cur.parent;
+    }
+    return obj;
+  }
+
   _getLookTargets(range) {
     const { origin, dir } = this.player.lookRay(range);
     this.raycaster.set(origin, dir);
     this.raycaster.far = range;
     const targets = [...this.world.resources, ...this.world.wreckage, ...this.world.buildings];
-    return this.raycaster.intersectObjects(targets, false);
+    return this.raycaster.intersectObjects(targets, true);
   }
 
   _tryMine(delta) {
     if (this.player.mineCooldown > 0) return;
     const hits = this._getLookTargets(CONST.MINE_RANGE);
-    const hit = hits.find((h) => h.object.userData.kind === "resource");
+    const hit = hits.find((h) => {
+      const root = this._findGameObject(h.object);
+      return root.userData.kind === "resource";
+    });
     if (!hit) {
       this.miningTarget = null;
       this.ui.setCrosshairMining(false);
       return;
     }
 
-    const node = hit.object;
+    const node = this._findGameObject(hit.object);
     this.miningTarget = node;
     this.ui.setCrosshairMining(true);
 
@@ -287,9 +302,9 @@ export class Game {
 
   _tryInteract() {
     const hits = this._getLookTargets(CONST.INTERACT_RANGE);
-    const hit = hits.find((h) => h.object.userData.kind === "wreckage");
+    const hit = hits.find((h) => this._findGameObject(h.object).userData.kind === "wreckage");
     if (!hit) return;
-    const wreck = hit.object;
+    const wreck = this._findGameObject(hit.object);
     if (!wreck.userData.looted) {
       wreck.userData.looted = true;
       this.inventory.addItem(wreck.userData.lootItem, wreck.userData.lootAmount);
