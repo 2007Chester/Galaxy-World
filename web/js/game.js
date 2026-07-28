@@ -775,6 +775,7 @@ export class Game {
     this.miningTarget = node;
     this.ui.setCrosshairMining(true);
     this.ui.flashCrosshair();
+    this.hands.punch();
     const progress = 1 - Math.max(0, node.userData.hp) / maxHp;
     this.ui.setMiningProgress({
       progress,
