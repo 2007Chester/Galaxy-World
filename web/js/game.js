@@ -98,7 +98,7 @@ export class Game {
     window.addEventListener("keydown", (e) => this._onKey(e));
     window.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest?.(".side-panel, .overlay, .menu-card, button, .slot, .recipe, .build-item, input")) {
+      if (e.target.closest?.(".side-panel, .overlay, .menu-card, .title-screen, button, .slot, .recipe, .build-item, input")) {
         return;
       }
       if (this.ui.isUiBlocking()) return;
@@ -158,6 +158,8 @@ export class Game {
     if (this.worldNameInput && data?.worldName && !this.worldNameInput.value) {
       this.worldNameInput.value = data.worldName;
     }
+    document.querySelector(".save-card")?.classList.toggle("ready", has);
+    document.querySelector(".save-card")?.classList.toggle("played", played);
   }
 
   async generateWorld() {

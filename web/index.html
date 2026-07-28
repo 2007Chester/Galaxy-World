@@ -6,6 +6,9 @@
   <title>Galaxy World</title>
   <meta name="description" content="Galaxy World — Build. Explore. Survive. Reach the Stars." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='16' fill='%230a1628'/%3E%3Ccircle cx='64' cy='64' r='28' fill='%233d8bfd'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./css/style.css" />
   <script type="importmap">
   {
@@ -20,30 +23,81 @@
   <div id="app">
     <canvas id="game-canvas"></canvas>
 
-    <div id="main-menu" class="overlay panel-center">
-      <div class="menu-card menu-card-wide">
-        <p class="eyebrow">Unknown Sector-7</p>
-        <h1>Galaxy World</h1>
-        <p class="tagline">Build. Explore. Survive. Reach the Stars.</p>
-
-        <div class="world-gen">
-          <label class="world-label" for="world-name">Имя мира</label>
-          <input id="world-name" type="text" maxlength="24" placeholder="Например: Aurora Outpost" autocomplete="off" />
-          <div class="gen-progress hidden" id="gen-progress">
-            <div class="gen-bar"><i id="gen-bar-fill"></i></div>
-            <p id="gen-status">Генерация сектора…</p>
-          </div>
-          <p id="save-summary" class="save-summary">Мир ещё не сгенерирован</p>
-        </div>
-
-        <div class="menu-actions">
-          <button id="btn-generate" class="btn primary">Сгенерировать мир</button>
-          <button id="btn-enter" class="btn" disabled>Войти в мир</button>
-          <button id="btn-continue" class="btn" disabled>Продолжить</button>
-          <button id="btn-delete-save" class="btn danger" disabled>Удалить сохранение</button>
-        </div>
-        <p class="hint">Сначала сгенерируйте мир — он сохранится в браузере. Потом можно войти и продолжить позже.</p>
+    <div id="main-menu" class="title-screen">
+      <div class="title-fx" aria-hidden="true">
+        <div class="fx-stars"></div>
+        <div class="fx-nebula"></div>
+        <div class="fx-planet"></div>
+        <div class="fx-ring"></div>
+        <div class="fx-horizon"></div>
+        <div class="fx-grain"></div>
+        <div class="fx-vignette"></div>
       </div>
+
+      <div class="title-layout">
+        <header class="title-brand">
+          <p class="eyebrow">Unknown Sector · Deep Range</p>
+          <h1 class="brand-title">
+            <span class="brand-line">Galaxy</span>
+            <span class="brand-line accent">World</span>
+          </h1>
+          <p class="tagline">Build. Explore. Survive. Reach the Stars.</p>
+        </header>
+
+        <div class="title-panels">
+          <nav class="title-nav" aria-label="Главное меню">
+            <button id="btn-continue" class="menu-link menu-link-continue" disabled>
+              <span class="menu-key">01</span>
+              <span class="menu-label">Продолжить</span>
+              <span class="menu-arrow" aria-hidden="true"></span>
+            </button>
+            <button id="btn-enter" class="menu-link menu-link-enter" disabled>
+              <span class="menu-key">02</span>
+              <span class="menu-label">Войти в мир</span>
+              <span class="menu-arrow" aria-hidden="true"></span>
+            </button>
+            <button id="btn-generate" class="menu-link menu-link-generate">
+              <span class="menu-key">03</span>
+              <span class="menu-label">Сгенерировать мир</span>
+              <span class="menu-arrow" aria-hidden="true"></span>
+            </button>
+            <button id="btn-delete-save" class="menu-link menu-link-danger" disabled>
+              <span class="menu-key">04</span>
+              <span class="menu-label">Удалить сохранение</span>
+              <span class="menu-arrow" aria-hidden="true"></span>
+            </button>
+          </nav>
+
+          <aside class="title-world">
+            <div class="world-panel">
+              <p class="world-kicker">Mission briefing</p>
+              <label class="world-label" for="world-name">Имя мира</label>
+              <input
+                id="world-name"
+                type="text"
+                maxlength="24"
+                placeholder="Aurora Outpost"
+                autocomplete="off"
+              />
+              <div class="gen-progress hidden" id="gen-progress">
+                <div class="gen-bar"><i id="gen-bar-fill"></i></div>
+                <p id="gen-status">Генерация сектора…</p>
+              </div>
+              <div class="save-card">
+                <span class="save-dot" aria-hidden="true"></span>
+                <p id="save-summary" class="save-summary">Мир ещё не сгенерирован</p>
+              </div>
+              <p class="hint">Мир сохраняется в браузере. Esc / M — выход в меню с автосохранением.</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <footer class="title-footer">
+        <span>Press to deploy</span>
+        <span class="footer-sep"></span>
+        <span>Offline sandbox</span>
+      </footer>
     </div>
 
     <div id="vignette" class="hidden"></div>
