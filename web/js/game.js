@@ -4,6 +4,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import {
   BuildingId,
+  BUILD_COSTS,
   CONST,
   EVA_MESSAGES,
   ITEM_COLORS,
@@ -45,6 +46,7 @@ export class Game {
       aurora: false,
       hangar: false,
       ship: false,
+      hangarReady: false,
     };
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
@@ -150,7 +152,31 @@ export class Game {
     this.inventory.onChange(() => {
       this.ui.updateInventory(this.inventory);
       this.player?.setOxygenCapacity(this.inventory.oxygenCapacity());
+      this._onInventoryChanged();
     });
+  }
+
+  _onInventoryChanged() {
+    const hangarCost = BUILD_COSTS[BuildingId.HANGAR];
+    const canHangar = this.inventory.hasItems(hangarCost);
+    if (canHangar && !this.triggers.hangarReady) {
+      this.triggers.hangarReady = true;
+      if (this.playing) {
+        this.ui.showEva(
+          "Хватает дерева, глины и камня — в меню строительства (B) открылся Ангар.",
+          7
+        );
+      }
+    }
+    if (this.buildMode) {
+      this.ui.refreshBuildList(this.inventory);
+      const visible = this.ui.getVisibleBuildingIds();
+      if (!visible.includes(this.selectedBuilding)) {
+        this.selectedBuilding = visible[0] ?? BuildingId.FOUNDATION;
+      }
+      this.ui.setBuildActive(this.selectedBuilding);
+      this._refreshPreview();
+    }
   }
 
   refreshMenu() {
@@ -283,10 +309,15 @@ export class Game {
             aurora: false,
             hangar: false,
             ship: false,
+            hangarReady: this.inventory.hasItems(BUILD_COSTS[BuildingId.HANGAR]),
           };
 
       if (continuePlay) this.inventory.load(save.inventory);
       else this.inventory.reset();
+
+      this.triggers.hangarReady =
+        !!this.triggers.hangarReady || this.inventory.hasItems(BUILD_COSTS[BuildingId.HANGAR]);
+      this.ui.refreshBuildList(this.inventory);
 
       const planetKey = String(this.planetIndex);
       const planet =
@@ -503,7 +534,12 @@ export class Game {
         this.mouse.down = false;
         this._placeBuilding();
       }
-    } else if (this.mouse.down && this.player.pointerLocked && this.mode === "planet") {
+    } else if (
+      this.player.keys.has("KeyE") &&
+      this.player.pointerLocked &&
+      this.mode === "planet" &&
+      !this.ui.isUiBlocking()
+    ) {
       this._tryMine(delta);
     } else {
       this.ui.setCrosshairMining(false);
@@ -572,6 +608,13 @@ export class Game {
     }
     if (e.code === "KeyB" && this.mode === "planet") {
       this.buildMode = !this.buildMode;
+      if (this.buildMode) {
+        this.ui.refreshBuildList(this.inventory);
+        const visible = this.ui.getVisibleBuildingIds();
+        if (!visible.includes(this.selectedBuilding)) {
+          this.selectedBuilding = visible[0] ?? BuildingId.FOUNDATION;
+        }
+      }
       this.ui.toggleBuild(this.buildMode);
       if (this.buildMode) {
         this.ui.setBuildActive(this.selectedBuilding);
@@ -583,15 +626,22 @@ export class Game {
       return;
     }
     if (this.buildMode && e.code >= "Digit1" && e.code <= "Digit8") {
-      this.selectedBuilding = Number(e.code.replace("Digit", "")) - 1;
-      this.ui.setBuildActive(this.selectedBuilding);
-      this._refreshPreview();
+      const visible = this.ui.getVisibleBuildingIds();
+      const idx = Number(e.code.replace("Digit", "")) - 1;
+      if (visible[idx] != null) {
+        this.selectedBuilding = visible[idx];
+        this.ui.setBuildActive(this.selectedBuilding);
+        this._refreshPreview();
+      }
+      return;
     }
     if (e.code === "Enter" && !this.ui.craftPanel.classList.contains("hidden")) {
       this._craftSelected();
       return;
     }
-    if (e.code === "KeyE" && !this.ui.isUiBlocking()) this._tryInteract();
+    if (e.code === "KeyE" && !e.repeat && !this.ui.isUiBlocking()) {
+      if (!this._isLookingAtResource()) this._tryInteract();
+    }
     if (e.code === "KeyF" && !this.ui.isUiBlocking()) this._tryShip();
     if (e.code === "KeyG" && this.mode === "space") this._landOnNearestPlanet();
     if (e.code === "KeyM") {
@@ -657,6 +707,11 @@ export class Game {
       ...(this.world.ships || []),
     ];
     return this.raycaster.intersectObjects(targets, true);
+  }
+
+  _isLookingAtResource() {
+    const hits = this._getLookTargets(CONST.MINE_RANGE);
+    return hits.some((h) => this._findGameObject(h.object).userData.kind === "resource");
   }
 
   _tryMine(delta) {

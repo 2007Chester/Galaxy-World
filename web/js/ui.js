@@ -96,28 +96,48 @@ export class UI {
     });
   }
 
-  _bindBuildings(onSelect) {
+  _bindBuildings(onSelect, inventory = null) {
+    this._buildSelectHandler = onSelect || this._buildSelectHandler;
     this.buildList.innerHTML = "";
+    let visibleIndex = 0;
     Object.entries(BUILDING_NAMES).forEach(([id, name]) => {
+      const buildingId = Number(id);
       const cost = BUILD_COSTS[id] || {};
+      // Hangar only appears once the player can afford it
+      if (buildingId === 5) {
+        const canHangar = inventory?.hasItems?.(cost);
+        if (!canHangar) return;
+      }
+      visibleIndex += 1;
       const costText = Object.entries(cost)
         .map(([item, amount]) => `${ITEM_NAMES[item]} x${amount}`)
         .join(", ");
       const el = document.createElement("div");
       el.className = "build-item";
       el.dataset.id = id;
-      el.innerHTML = `<strong>${Number(id) + 1}. ${name}</strong><br/><small>${costText}</small>`;
+      el.innerHTML = `<strong>${visibleIndex}. ${name}</strong><br/><small>${costText}</small>`;
       el.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        onSelect?.(Number(id));
+        this._buildSelectHandler?.(buildingId);
       });
       this.buildList.appendChild(el);
     });
   }
 
   setBuildHandler(fn) {
-    this._bindBuildings(fn);
+    this._buildSelectHandler = fn;
+    this._bindBuildings(fn, this._inventoryRef);
+  }
+
+  /** Refresh build list (e.g. unlock hangar when resources are ready). */
+  refreshBuildList(inventory) {
+    this._inventoryRef = inventory || this._inventoryRef;
+    this._bindBuildings(this._buildSelectHandler, this._inventoryRef);
+  }
+
+  getVisibleBuildingIds() {
+    return [...this.buildList.children].map((el) => Number(el.dataset.id));
   }
 
   showMenu() {
@@ -160,7 +180,7 @@ export class UI {
         "Мышь свободна: клик по модулю или 1–8. ЛКМ по миру — поставить. Esc — закрыть";
     } else {
       this.hint.textContent =
-        "WASD | Shift бег | ЛКМ добыча | E ангар | F корабль | Esc/M меню | Tab инвентарь | C крафт | B стройка";
+        "WASD | Shift бег | E добыча / взаимодействие | F корабль | Esc/M меню | Tab инвентарь | C крафт | B стройка";
     }
     this.syncPointerLock();
   }
@@ -213,6 +233,7 @@ export class UI {
 
   updateInventory(inventory) {
     this._inventoryRef = inventory;
+    this.refreshBuildList(inventory);
     this.inventorySlots.innerHTML = "";
     inventory.slots.forEach((slot, index) => {
       const el = document.createElement("button");
