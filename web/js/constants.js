@@ -20,6 +20,7 @@ export const ItemId = {
   O2_TANK: 18,
   O2_GENERATOR: 19,
   SHIP_KIT: 20,
+  BUCKET: 21,
 };
 
 export const BuildingId = {
@@ -63,6 +64,7 @@ export const ITEM_NAMES = {
   [ItemId.O2_TANK]: "O₂ баллон+",
   [ItemId.O2_GENERATOR]: "O₂ генератор",
   [ItemId.SHIP_KIT]: "Набор корабля",
+  [ItemId.BUCKET]: "Ведро",
 };
 
 export const BUILDING_NAMES = {
@@ -100,7 +102,7 @@ export const GATHER_RULES = {
   [ItemId.SILICON]: { tool: ItemId.PICKAXE, bare: 0.25 },
   [ItemId.ORGANIC]: { tool: ItemId.KNIFE, bare: 0.5 },
   [ItemId.FOOD]: { tool: ItemId.KNIFE, bare: 0.4 },
-  [ItemId.WATER]: { tool: ItemId.SHOVEL, bare: 0.55 },
+  [ItemId.WATER]: { tool: ItemId.BUCKET, bare: 0 },
   [ItemId.SEEDS]: { tool: -1, bare: 1.0 },
   [ItemId.WRECK_PART]: { tool: -1, bare: 1.0 },
 };
@@ -110,6 +112,7 @@ export const TOOL_ITEMS = new Set([
   ItemId.SHOVEL,
   ItemId.KNIFE,
   ItemId.PICKAXE,
+  ItemId.BUCKET,
 ]);
 
 export const CONST = {
@@ -177,6 +180,13 @@ export const RECIPES = [
     inputs: { [ItemId.WOOD]: 3, [ItemId.STONE]: 4 },
   },
   {
+    id: "bucket",
+    name: "Ведро",
+    outputId: ItemId.BUCKET,
+    outputAmount: 1,
+    inputs: { [ItemId.WOOD]: 3, [ItemId.CLAY]: 4 },
+  },
+  {
     id: "metal_plate",
     name: "Металл. пластина",
     outputId: ItemId.METAL_PLATE,
@@ -237,9 +247,10 @@ export const BUILD_COSTS = {
 
 export const EVA_MESSAGES = {
   start:
-    "Пилот, Aurora разбита. Соберите дерево (E) и сделайте топор. Воду набирайте из озера, реки или моря — лопатой быстрее.",
+    "Пилот, Aurora разбита. Соберите дерево (E) и сделайте топор. Для воды скрафтите ведро из дерева и глины, экипируйте и наберите из озера/реки/моря.",
   firstMine: "Ресурсы есть. Крафтите инструменты — с ними добыча быстрее.",
-  firstCraft: "Инструмент готов. Экипируйте его в инвентаре (клик по топору/лопате).",
+  firstCraft: "Инструмент готов. Экипируйте его в инвентаре (клик по предмету).",
+  needBucket: "Чтобы набрать воду, скрафтите ведро (дерево + глина) и экипируйте его в инвентаре.",
   firstBuild: "База растёт. Для космолёта нужен ангар из дерева и глины.",
   hangar:
     "Ангар готов. Соберите обломки Aurora и скрафтите «Набор корабля», затем установите корабль у ангара (E).",

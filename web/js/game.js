@@ -727,6 +727,21 @@ export class Game {
       this.ui.setCrosshairMining(false);
       return;
     }
+
+    // Water requires an equipped bucket
+    if (node.userData.itemId === ItemId.WATER) {
+      if (this.inventory.equippedTool !== ItemId.BUCKET) {
+        this.ui.setCrosshairMining(false);
+        this.ui.setMiningProgress(null);
+        this._bucketHintTimer = (this._bucketHintTimer || 0) - delta;
+        if (this._bucketHintTimer <= 0) {
+          this.ui.showEva(EVA_MESSAGES.needBucket, 5);
+          this._bucketHintTimer = 4;
+        }
+        return;
+      }
+    }
+
     const maxHp = node.userData.maxHp || 70;
     if (node.userData.hp == null) node.userData.hp = maxHp;
     const dropAmount = node.userData.drop || 1;
@@ -781,7 +796,7 @@ export class Game {
       }
       if (itemId === ItemId.WATER && !this.triggers.water) {
         this.triggers.water = true;
-        this.ui.showEva("Воду можно снова набрать из озера, реки или моря. С лопатой быстрее.", 6);
+        this.ui.showEva("Вода набрана ведром. Можно снова черпать из озера, реки или моря.", 6);
       }
     }
   }
