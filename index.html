@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaxy World — Play</title>
+  <meta name="description" content="Играйте в Galaxy World и OVERPRESSURE прямо в браузере." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='16' fill='%230a1628'/%3E%3Ccircle cx='64' cy='64' r='28' fill='%233d8bfd'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #050910;
+      --card: rgba(10, 20, 38, 0.92);
+      --line: rgba(130, 170, 220, 0.25);
+      --text: #e8f0ff;
+      --muted: #8fa3c0;
+      --accent: #3d8bfd;
+      --teal: #5eead4;
+      --hot: #ff6b4a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse at 15% 0%, rgba(61, 139, 253, 0.22), transparent 42%),
+        radial-gradient(ellipse at 90% 100%, rgba(255, 107, 74, 0.12), transparent 40%),
+        linear-gradient(165deg, #04080f, #0a1628 55%, #071018);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .wrap { width: min(920px, 100%); }
+    .eyebrow {
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      color: var(--teal);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-size: clamp(2.2rem, 6vw, 3.4rem);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.6rem;
+    }
+    .lead {
+      color: var(--muted);
+      max-width: 36rem;
+      line-height: 1.5;
+      margin-bottom: 2rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 1.4rem 1.3rem 1.5rem;
+      transition: border-color 0.15s, transform 0.15s, background 0.15s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      background: rgba(14, 28, 52, 0.95);
+    }
+    .card.hot:hover { border-color: var(--hot); }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.55rem;
+    }
+    .card.hot .badge { color: var(--hot); }
+    .card h2 { font-size: 1.45rem; margin-bottom: 0.45rem; }
+    .card p { color: var(--muted); font-size: 0.95rem; line-height: 1.45; margin-bottom: 1rem; }
+    .cta {
+      display: inline-block;
+      padding: 0.55rem 0.95rem;
+      background: linear-gradient(90deg, #2b6fdb, #3d8bfd);
+      color: white;
+      font-size: 0.9rem;
+    }
+    .card.hot .cta { background: linear-gradient(90deg, #c2410c, #ff6b4a); }
+    footer {
+      margin-top: 2rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--teal); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <p class="eyebrow">Browser games</p>
+    <h1>Galaxy World</h1>
+    <p class="lead">Выберите игру и делитесь этой страницей — всё запускается прямо в браузере, без установки.</p>
+    <div class="grid">
+      <a class="card" href="./web/">
+        <div class="badge">Sandbox</div>
+        <h2>Galaxy World</h2>
+        <p>Космическая песочница: планета, добыча, крафт, база и EVA.</p>
+        <span class="cta">Играть →</span>
+      </a>
+      <a class="card hot" href="./fps-aaa/">
+        <div class="badge">FPS</div>
+        <h2>OVERPRESSURE</h2>
+        <p>Тактический шутер от первого лица: оружие, волны врагов, HUD.</p>
+        <span class="cta">Играть →</span>
+      </a>
+    </div>
+    <footer>
+      Исходники на
+      <a href="https://github.com/2007Chester/Galaxy-World">GitHub</a>.
+      Лучше на десктопе (мышь + pointer lock).
+    </footer>
+  </main>
+</body>
+</html>

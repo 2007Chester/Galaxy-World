@@ -4,6 +4,26 @@
 
 Космическая песочница: процедурная планета, выживание, добыча, крафт, база и EVA.
 
+## Играть онлайн (ссылка для друзей)
+
+После включения GitHub Pages игры доступны здесь:
+
+| Игра | Ссылка |
+|------|--------|
+| **Хаб (выбор игр)** | https://2007chester.github.io/Galaxy-World/ |
+| **Galaxy World** | https://2007chester.github.io/Galaxy-World/web/ |
+| **OVERPRESSURE (FPS)** | https://2007chester.github.io/Galaxy-World/fps-aaa/ |
+
+Этими ссылками можно делиться — игра открывается в браузере без установки.
+
+### Как включить GitHub Pages (один раз)
+
+1. Откройте репозиторий → **Settings** → **Pages**
+2. **Source**: GitHub Actions
+3. Дождитесь зелёного workflow **Deploy Pages** на вкладке Actions (после push в `main`)
+
+---
+
 Доступны три версии:
 
 1. **OVERPRESSURE** (`fps-aaa/`) — браузерный tactical FPS vertical slice (Three.js, без сборки)
@@ -15,6 +35,10 @@
 ## OVERPRESSURE — браузерный FPS (`fps-aaa/`)
 
 Тактический FPS vertical slice: процедурная карта, оружие, враги, HUD, звук и post-processing. Без npm и без сборки.
+
+**Онлайн:** https://2007chester.github.io/Galaxy-World/fps-aaa/
+
+Локально:
 
 ```bash
 cd fps-aaa
@@ -29,7 +53,9 @@ python3 serve.py            # http://127.0.0.1:8123/
 
 ## Браузерная версия Galaxy World (`web/`)
 
-### Запуск
+**Онлайн:** https://2007chester.github.io/Galaxy-World/web/
+
+### Запуск локально
 
 ```bash
 cd "/Users/annaivannikova/Yandex.Disk.localized/MacBook Air/Project/Galaxy World"
