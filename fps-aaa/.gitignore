@@ -1,0 +1,7 @@
+# The repo-root .gitignore excludes build/ for Godot exports; the vendored
+# Three.js distribution lives in vendor/three/build and must be tracked.
+!vendor/three/build/
+!vendor/three/build/**
+
+# local capture output
+/shots/

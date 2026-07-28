@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OVERPRESSURE — Tactical FPS</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./src/ui/hud.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/webgpu": "./vendor/three/build/three.module.js",
+    "three/tsl": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui-root"></div>
+<noscript>This game requires JavaScript and WebGL2.</noscript>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
