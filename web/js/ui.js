@@ -23,10 +23,42 @@ export class UI {
     this.crosshair = document.getElementById("crosshair");
     this.vignette = document.getElementById("vignette");
     this.selectedRecipe = 0;
+    this.selectedSlot = -1;
     this.evaTimer = 0;
     this.crosshairFlash = 0;
+    this.onPanelChange = null;
     this._bindRecipes();
     this._bindBuildings();
+    this._bindPanelClicks();
+  }
+
+  _bindPanelClicks() {
+    for (const panel of [this.inventoryPanel, this.craftPanel, this.buildPanel, this.completePanel, this.mainMenu]) {
+      if (!panel) continue;
+      panel.addEventListener("mousedown", (e) => e.stopPropagation());
+      panel.addEventListener("mouseup", (e) => e.stopPropagation());
+      panel.addEventListener("click", (e) => e.stopPropagation());
+    }
+  }
+
+  /** Release mouse when UI needs clicks; return true if a panel is open. */
+  syncPointerLock() {
+    const open = this.isUiBlocking();
+    if (open) document.exitPointerLock?.();
+    document.body.classList.toggle("ui-open", open);
+    this.crosshair?.classList.toggle("hidden-soft", open);
+    this.onPanelChange?.(open);
+    return open;
+  }
+
+  isUiBlocking() {
+    return (
+      !this.inventoryPanel.classList.contains("hidden") ||
+      !this.craftPanel.classList.contains("hidden") ||
+      !this.buildPanel.classList.contains("hidden") ||
+      !this.completePanel.classList.contains("hidden") ||
+      !this.mainMenu.classList.contains("hidden")
+    );
   }
 
   _bindRecipes() {
@@ -35,12 +67,15 @@ export class UI {
       const el = document.createElement("div");
       el.className = "recipe" + (index === 0 ? " active" : "");
       el.textContent = recipe.name;
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         this.selectedRecipe = index;
         [...this.recipeList.children].forEach((c, i) =>
           c.classList.toggle("active", i === index)
         );
-        this.updateCraftStatus();
+        // Prefer live inventory if game attached it
+        this.updateCraftStatus(this._inventoryRef);
       });
       this.recipeList.appendChild(el);
     });
@@ -57,7 +92,11 @@ export class UI {
       el.className = "build-item";
       el.dataset.id = id;
       el.innerHTML = `<strong>${Number(id) + 1}. ${name}</strong><br/><small>${costText}</small>`;
-      el.addEventListener("click", () => onSelect?.(Number(id)));
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect?.(Number(id));
+      });
       this.buildList.appendChild(el);
     });
   }
@@ -90,30 +129,28 @@ export class UI {
 
   toggleInventory(force) {
     this._toggle(this.inventoryPanel, force);
+    this.syncPointerLock();
   }
 
   toggleCraft(force) {
     this._toggle(this.craftPanel, force);
+    this.syncPointerLock();
   }
 
   toggleBuild(force) {
     this._toggle(this.buildPanel, force);
     if (!this.buildPanel.classList.contains("hidden")) {
-      this.hint.textContent = "B — выход | 1-5 модуль | ЛКМ — поставить";
+      this.hint.textContent =
+        "Мышь свободна: выберите модуль кликом или 1–5. Клик по миру — снова захват. ЛКМ — поставить";
     } else {
       this.hint.textContent =
         "WASD — движение | Shift — бег | ЛКМ — добыча | E — взаимодействие | Tab — инвентарь | C — крафт | B — строительство";
     }
+    this.syncPointerLock();
   }
 
   isOverlayOpen() {
-    return (
-      !this.inventoryPanel.classList.contains("hidden") ||
-      !this.craftPanel.classList.contains("hidden") ||
-      !this.buildPanel.classList.contains("hidden") ||
-      !this.completePanel.classList.contains("hidden") ||
-      !this.mainMenu.classList.contains("hidden")
-    );
+    return this.isUiBlocking();
   }
 
   buildModeOpen() {
@@ -139,16 +176,27 @@ export class UI {
   }
 
   updateInventory(inventory) {
+    this._inventoryRef = inventory;
     this.inventorySlots.innerHTML = "";
-    for (const slot of inventory.slots) {
-      const el = document.createElement("div");
+    inventory.slots.forEach((slot, index) => {
+      const el = document.createElement("button");
+      el.type = "button";
       el.className = "slot";
-      el.textContent =
-        slot.itemId === -1 || slot.amount <= 0
-          ? "—"
-          : `${ITEM_NAMES[slot.itemId]} x${slot.amount}`;
+      const empty = slot.itemId === -1 || slot.amount <= 0;
+      el.disabled = empty;
+      el.textContent = empty ? "—" : `${ITEM_NAMES[slot.itemId]} x${slot.amount}`;
+      if (!empty && this.selectedSlot === index) el.classList.add("active");
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (empty) return;
+        this.selectedSlot = index;
+        this.updateInventory(inventory);
+        const name = ITEM_NAMES[slot.itemId];
+        this.hint.textContent = `Выбрано: ${name} x${slot.amount}. Откройте крафт (C), чтобы создать предметы.`;
+      });
       this.inventorySlots.appendChild(el);
-    }
+    });
     this.updateCraftStatus(inventory);
   }
 
@@ -217,3 +265,4 @@ export class UI {
     el.classList.toggle("hidden");
   }
 }
+

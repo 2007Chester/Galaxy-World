@@ -78,7 +78,13 @@ export class Game {
     window.addEventListener("resize", () => this._onResize());
     window.addEventListener("keydown", (e) => this._onKey(e));
     window.addEventListener("mousedown", (e) => {
-      if (e.button === 0) this.mouse.down = true;
+      if (e.button !== 0) return;
+      // Clicks on HUD panels must not trigger mining / building place.
+      if (e.target.closest?.(".side-panel, .overlay, .menu-card, button, .slot, .recipe, .build-item")) {
+        return;
+      }
+      if (this.ui.isUiBlocking()) return;
+      this.mouse.down = true;
     });
     window.addEventListener("mouseup", (e) => {
       if (e.button === 0) this.mouse.down = false;
@@ -88,7 +94,11 @@ export class Game {
   _bindUI() {
     document.getElementById("btn-start").addEventListener("click", () => this.start());
     document.getElementById("btn-menu").addEventListener("click", () => this.toMenu());
-    document.getElementById("btn-craft").addEventListener("click", () => this._craftSelected());
+    document.getElementById("btn-craft").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._craftSelected();
+    });
     this.ui.setBuildHandler((id) => {
       this.selectedBuilding = id;
       this.ui.setBuildActive(id);
@@ -188,10 +198,12 @@ export class Game {
       e.preventDefault();
       this.ui.toggleInventory();
       this.ui.updateInventory(this.inventory);
+      return;
     }
     if (e.code === "KeyC") {
       this.ui.toggleCraft();
       this.ui.updateCraftStatus(this.inventory);
+      return;
     }
     if (e.code === "KeyB") {
       this.buildMode = !this.buildMode;
@@ -203,14 +215,36 @@ export class Game {
         this.scene.remove(this.preview);
         this.preview = null;
       }
+      return;
     }
     if (this.buildMode && e.code >= "Digit1" && e.code <= "Digit5") {
       this.selectedBuilding = Number(e.code.replace("Digit", "")) - 1;
       this.ui.setBuildActive(this.selectedBuilding);
       this._refreshPreview();
     }
-    if (e.code === "KeyE") this._tryInteract();
-    if (e.code === "Escape") document.exitPointerLock?.();
+    // Enter crafts when craft panel is open
+    if (e.code === "Enter" && !this.ui.craftPanel.classList.contains("hidden")) {
+      this._craftSelected();
+      return;
+    }
+    if (e.code === "KeyE" && !this.ui.isUiBlocking()) this._tryInteract();
+    if (e.code === "Escape") {
+      if (this.ui.isUiBlocking() && this.ui.mainMenu.classList.contains("hidden")) {
+        this.ui.toggleInventory(false);
+        this.ui.toggleCraft(false);
+        if (this.buildMode) {
+          this.buildMode = false;
+          this.ui.toggleBuild(false);
+          if (this.preview) {
+            this.scene.remove(this.preview);
+            this.preview = null;
+          }
+        }
+        this.canvas.requestPointerLock?.();
+      } else {
+        document.exitPointerLock?.();
+      }
+    }
   }
 
   _craftSelected() {

@@ -318,7 +318,7 @@ html, body, #app {
 
 .side-panel {
   position: absolute;
-  z-index: 15;
+  z-index: 40;
   pointer-events: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -351,12 +351,50 @@ html, body, #app {
   gap: 6px;
 }
 
+body.ui-open {
+  cursor: default;
+}
+
+body.ui-open #game-canvas {
+  cursor: default;
+}
+
+#crosshair.hidden-soft {
+  opacity: 0.15;
+}
+
 .slot, .recipe, .build-item {
   border: 1px solid var(--line);
   padding: 8px;
   font-size: 0.85rem;
   background: rgba(255, 255, 255, 0.03);
   transition: border-color 0.15s, background 0.15s;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+button.slot {
+  cursor: pointer;
+  appearance: none;
+  border-radius: 0;
+}
+
+button.slot:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+button.slot:not(:disabled):hover {
+  border-color: rgba(61, 139, 253, 0.55);
+}
+
+button.slot.active,
+.recipe.active,
+.build-item.active {
+  border-color: var(--accent);
+  background: rgba(61, 139, 253, 0.18);
 }
 
 .recipe, .build-item {
@@ -368,12 +406,13 @@ html, body, #app {
   border-color: rgba(61, 139, 253, 0.5);
 }
 
-.recipe.active, .build-item.active {
-  border-color: var(--accent);
-  background: rgba(61, 139, 253, 0.15);
-}
-
 #craft-status { color: var(--muted); margin: 8px 0; font-size: 0.85rem; }
+
+#btn-craft {
+  pointer-events: auto;
+  cursor: pointer;
+  width: 100%;
+}
 
 .build-list {
   display: grid;

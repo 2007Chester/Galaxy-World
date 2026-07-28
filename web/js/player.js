@@ -39,6 +39,7 @@ export class Player {
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     dom.addEventListener("click", () => {
+      if (document.body.classList.contains("ui-open")) return;
       if (!this.pointerLocked) dom.requestPointerLock();
     });
     document.addEventListener("pointerlockchange", () => {
