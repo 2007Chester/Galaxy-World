@@ -1,12 +1,12 @@
-import { CONST, ITEM_NAMES } from "./constants.js";
+import { CONST, ITEM_NAMES, TOOL_ITEMS, ItemId } from "./constants.js";
 
 export class Inventory {
   constructor() {
-    this.slots = Array.from({ length: CONST.INVENTORY_SLOTS }, () => ({
-      itemId: -1,
-      amount: 0,
-    }));
+    this.slots = [];
+    this.equippedTool = -1;
+    this.tankLevel = 0;
     this.listeners = new Set();
+    this.reset();
   }
 
   onChange(fn) {
@@ -23,7 +23,13 @@ export class Inventory {
       itemId: -1,
       amount: 0,
     }));
+    this.equippedTool = -1;
+    this.tankLevel = 0;
     this.emit();
+  }
+
+  oxygenCapacity() {
+    return CONST.BASE_O2_CAPACITY + this.tankLevel * CONST.TANK_BONUS;
   }
 
   getCount(itemId) {
@@ -70,6 +76,9 @@ export class Inventory {
         }
       }
     }
+    if (this.equippedTool === itemId && this.getCount(itemId) <= 0) {
+      this.equippedTool = -1;
+    }
     this.emit();
     return true;
   }
@@ -80,6 +89,31 @@ export class Inventory {
       this.removeItem(Number(id), amount);
     }
     return true;
+  }
+
+  equipFromSlot(slotIndex) {
+    const slot = this.slots[slotIndex];
+    if (!slot || slot.itemId < 0) return false;
+    if (TOOL_ITEMS.has(slot.itemId)) {
+      this.equippedTool = slot.itemId;
+      this.emit();
+      return "tool";
+    }
+    if (slot.itemId === ItemId.O2_TANK) {
+      if (this.tankLevel >= CONST.MAX_TANK_LEVEL) return false;
+      if (this.removeItem(ItemId.O2_TANK, 1)) {
+        this.tankLevel += 1;
+        this.emit();
+        return "tank";
+      }
+    }
+    if (slot.itemId === ItemId.FOOD) {
+      if (this.removeItem(ItemId.FOOD, 1)) return "food";
+    }
+    if (slot.itemId === ItemId.WATER) {
+      if (this.removeItem(ItemId.WATER, 1)) return "water";
+    }
+    return false;
   }
 
   filledSlots() {

@@ -10,6 +10,7 @@ import {
   ITEM_NAMES,
   ItemId,
   RECIPES,
+  gatherMultiplier,
 } from "./constants.js";
 import { GameAudio } from "./audio.js";
 import { Crafting } from "./crafting.js";
@@ -29,13 +30,23 @@ export class Game {
     this.playing = false;
     this.buildMode = false;
     this.selectedBuilding = BuildingId.FOUNDATION;
-    this.triggers = { mine: false, craft: false, build: false, aurora: false };
+    this.triggers = {
+      mine: false,
+      craft: false,
+      build: false,
+      aurora: false,
+      hangar: false,
+      ship: false,
+    };
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
     this.mouse = { down: false };
     this.shake = new CameraShake();
     this.particles = null;
     this.miningTarget = null;
+    this.mode = "planet"; // planet | space
+    this.planetIndex = 0;
+    this.spaceMarkers = [];
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -52,22 +63,17 @@ export class Game {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a1628);
-    this.scene.fog = new THREE.Fog(0x0a1628, 40, 140);
+    this.scene.fog = new THREE.Fog(0x0a1628, 50, 160);
 
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      300
-    );
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.35,
-      0.55,
-      0.82
+      0.32,
+      0.5,
+      0.85
     );
     this.composer.addPass(this.bloomPass);
 
@@ -80,7 +86,6 @@ export class Game {
     window.addEventListener("keydown", (e) => this._onKey(e));
     window.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      // Clicks on HUD panels must not trigger mining / building place.
       if (e.target.closest?.(".side-panel, .overlay, .menu-card, button, .slot, .recipe, .build-item")) {
         return;
       }
@@ -105,37 +110,62 @@ export class Game {
       this.ui.setBuildActive(id);
       this._refreshPreview();
     });
-    this.inventory.onChange(() => this.ui.updateInventory(this.inventory));
+    this.ui.onEquipSlot = (index) => this._useInventorySlot(index);
+    this.inventory.onChange(() => {
+      this.ui.updateInventory(this.inventory);
+      this.player?.setOxygenCapacity(this.inventory.oxygenCapacity());
+    });
   }
 
-  start() {
+  start(seed = (Math.random() * 1e9) | 0, { keepInventory = false, planetIndex = null } = {}) {
+    if (planetIndex != null) this.planetIndex = planetIndex;
+    if (!keepInventory) {
+      this.planetIndex = planetIndex != null ? planetIndex : 0;
+      this.inventory.reset();
+    }
+
     if (this.world) this.world.dispose();
     if (this.preview) {
       this.scene.remove(this.preview);
       this.preview = null;
     }
+    this._clearSpaceMarkers();
 
-    const seed = (Math.random() * 1e9) | 0;
     this.world = new World(this.scene, seed);
     this.world.build();
     this.particles = new ParticleBurst(this.scene);
-    this.player = new Player(this.camera, this.world);
-    this.player.bindInput(this.canvas);
-    this.player.onFootstep = () => {
-      if (this.player.pointerLocked) this.audio.playFootstep();
-    };
+    if (!this.player) {
+      this.player = new Player(this.camera, this.world);
+      this.player.bindInput(this.canvas);
+      this.player.onFootstep = () => {
+        if (this.player.pointerLocked) this.audio.playFootstep();
+      };
+    } else {
+      this.player.world = this.world;
+      this.player.flying = false;
+    }
+    this.player.setOxygenCapacity(this.inventory.oxygenCapacity());
     this.player.spawn();
-    this.inventory.reset();
-    this.triggers = { mine: false, craft: false, build: false, aurora: false };
+    this.triggers = {
+      mine: false,
+      craft: false,
+      build: false,
+      aurora: false,
+      hangar: false,
+      ship: false,
+    };
     this.buildMode = false;
     this.miningTarget = null;
+    this.mode = "planet";
     this.playing = true;
+    this.scene.background = new THREE.Color(0x0a1628);
+    this.scene.fog = new THREE.Fog(0x0a1628, 50, 160);
     this.ui.showGame();
     this.ui.toggleBuild(false);
     this.ui.toggleInventory(false);
     this.ui.toggleCraft(false);
     this.ui.updateInventory(this.inventory);
-    this.ui.showEva(EVA_MESSAGES.start);
+    this.ui.showEva(this.planetIndex === 0 ? EVA_MESSAGES.start : EVA_MESSAGES.newPlanet);
     this.audio.startAmbience();
     this.canvas.requestPointerLock?.();
   }
@@ -162,26 +192,38 @@ export class Game {
 
     const blocked = this.ui.isOverlayOpen() && !this.ui.buildModeOpen();
     this.player.update(delta, !blocked || this.ui.buildModeOpen());
-    this.world.updateDayNight(this.clock.elapsedTime);
-    this._applyGeneratorBuff(delta);
-    this.ui.updateStats(this.player.stats);
+
+    if (this.mode === "planet") {
+      this.world.updateChunks(this.player.position.x, this.player.position.z);
+      this.world.updateDayNight(this.clock.elapsedTime);
+      this._applyBuildingBuffs(delta);
+    } else {
+      this._updateSpace(delta);
+    }
+
+    this.ui.updateStats(this.player.stats, {
+      tool: this.inventory.equippedTool,
+      tank: this.inventory.tankLevel,
+      capacity: this.inventory.oxygenCapacity(),
+      mode: this.mode,
+      planet: this.planetIndex,
+    });
     this._applyCameraShake();
 
     if (this.player.isDead()) {
       this.player.spawn();
-      this.ui.showEva("Системы скафандра перезапущены. Респавн у капсулы.");
+      this.ui.showEva("Системы скафандра перезапущены у точки высадки.");
     }
 
-    if (this.buildMode) {
+    if (this.buildMode && this.mode === "planet") {
       this._updatePreview();
       if (this.mouse.down) {
         this.mouse.down = false;
         this._placeBuilding();
       }
-    } else if (this.mouse.down && this.player.pointerLocked) {
+    } else if (this.mouse.down && this.player.pointerLocked && this.mode === "planet") {
       this._tryMine(delta);
     } else {
-      this.miningTarget = null;
       this.ui.setCrosshairMining(false);
     }
 
@@ -193,6 +235,46 @@ export class Game {
     this.camera.position.add(this.shake.offset);
   }
 
+  _applyBuildingBuffs(delta) {
+    for (const b of this.world.buildings) {
+      const id = b.userData.buildingId;
+      const dist = b.position.distanceTo(this.player.position);
+      if (
+        (id === BuildingId.GENERATOR || id === BuildingId.OXYGEN_STATION || id === BuildingId.O2_FILLER) &&
+        dist <= (id === BuildingId.O2_FILLER ? CONST.O2_FILLER_RADIUS : CONST.GENERATOR_O2_RADIUS)
+      ) {
+        const rate = id === BuildingId.O2_FILLER ? CONST.O2_FILLER_RATE : CONST.GENERATOR_O2_RATE;
+        this.player.applyGeneratorO2(rate * delta);
+      }
+      if (id === BuildingId.FARM_PLOT && dist < 4) {
+        // Passive food trickle while near farm
+        if (Math.random() < delta * 0.15) this.inventory.addItem(ItemId.FOOD, 1);
+      }
+    }
+  }
+
+  _useInventorySlot(index) {
+    const result = this.inventory.equipFromSlot(index);
+    if (result === "tool") {
+      this.ui.showEva(
+        `Экипировано: ${ITEM_NAMES[this.inventory.equippedTool]}. Добыча с инструментом быстрее.`,
+        4
+      );
+    } else if (result === "tank") {
+      this.player.setOxygenCapacity(this.inventory.oxygenCapacity());
+      this.ui.showEva(
+        `Баллон улучшен до ур.${this.inventory.tankLevel}. Ёмкость O₂: ${this.inventory.oxygenCapacity()}.`,
+        5
+      );
+    } else if (result === "food") {
+      this.player.eat();
+      this.ui.showEva("Еда восстановлена.", 3);
+    } else if (result === "water") {
+      this.player.drink();
+      this.ui.showEva("Вода восстановлена.", 3);
+    }
+  }
+
   _onKey(e) {
     if (!this.playing) return;
     if (e.code === "Tab") {
@@ -201,12 +283,12 @@ export class Game {
       this.ui.updateInventory(this.inventory);
       return;
     }
-    if (e.code === "KeyC") {
+    if (e.code === "KeyC" && !this.player.flying) {
       this.ui.toggleCraft();
       this.ui.updateCraftStatus(this.inventory);
       return;
     }
-    if (e.code === "KeyB") {
+    if (e.code === "KeyB" && this.mode === "planet") {
       this.buildMode = !this.buildMode;
       this.ui.toggleBuild(this.buildMode);
       if (this.buildMode) {
@@ -218,17 +300,18 @@ export class Game {
       }
       return;
     }
-    if (this.buildMode && e.code >= "Digit1" && e.code <= "Digit5") {
+    if (this.buildMode && e.code >= "Digit1" && e.code <= "Digit8") {
       this.selectedBuilding = Number(e.code.replace("Digit", "")) - 1;
       this.ui.setBuildActive(this.selectedBuilding);
       this._refreshPreview();
     }
-    // Enter crafts when craft panel is open
     if (e.code === "Enter" && !this.ui.craftPanel.classList.contains("hidden")) {
       this._craftSelected();
       return;
     }
     if (e.code === "KeyE" && !this.ui.isUiBlocking()) this._tryInteract();
+    if (e.code === "KeyF" && !this.ui.isUiBlocking()) this._tryShip();
+    if (e.code === "KeyG" && this.mode === "space") this._landOnNearestPlanet();
     if (e.code === "Escape") {
       if (this.ui.isUiBlocking() && this.ui.mainMenu.classList.contains("hidden")) {
         this.ui.toggleInventory(false);
@@ -257,19 +340,19 @@ export class Game {
         this.triggers.craft = true;
         this.ui.showEva(EVA_MESSAGES.firstCraft);
       }
+      if (recipe.outputId === ItemId.SHIP_KIT) {
+        this.ui.showEva("Набор корабля готов. Подойдите к ангару и нажмите E.", 6);
+      }
     } else {
       this.ui.craftStatus.textContent = "Недостаточно ресурсов";
     }
   }
 
   _findGameObject(obj) {
-    let cur = obj;
-    while (cur) {
-      const d = cur.userData;
-      if (d?.maxHp !== undefined || d?.looted !== undefined || d?.buildingId !== undefined) {
-        return cur;
-      }
-      cur = cur.parent;
+    let o = obj;
+    while (o) {
+      if (o.userData?.kind) return o;
+      o = o.parent;
     }
     return obj;
   }
@@ -278,54 +361,48 @@ export class Game {
     const { origin, dir } = this.player.lookRay(range);
     this.raycaster.set(origin, dir);
     this.raycaster.far = range;
-    const targets = [...this.world.resources, ...this.world.wreckage, ...this.world.buildings];
+    const targets = [
+      ...this.world.resources,
+      ...this.world.buildings,
+      ...this.world.ships,
+    ];
     return this.raycaster.intersectObjects(targets, true);
   }
 
   _tryMine(delta) {
     if (this.player.mineCooldown > 0) return;
     const hits = this._getLookTargets(CONST.MINE_RANGE);
-    const hit = hits.find((h) => {
-      const root = this._findGameObject(h.object);
-      return root.userData.kind === "resource";
-    });
+    const hit = hits.find((h) => this._findGameObject(h.object).userData.kind === "resource");
     if (!hit) {
       this.miningTarget = null;
       this.ui.setCrosshairMining(false);
       return;
     }
-
     const node = this._findGameObject(hit.object);
+    const mult = gatherMultiplier(node.userData.itemId, this.inventory.equippedTool);
+    const dmg = CONST.MINE_DAMAGE * mult * Math.max(delta * 4, 0.35);
+    node.userData.hp -= dmg;
+    this.player.spendMining(delta);
+    this.player.mineCooldown = 0.12;
     this.miningTarget = node;
     this.ui.setCrosshairMining(true);
-
-    node.userData.hp -= CONST.MINE_DAMAGE;
-    const newRatio = node.userData.hp / node.userData.maxHp;
-    const punch = 0.85 + (1 - newRatio) * 0.15;
-    node.scale.setScalar(punch);
-    setTimeout(() => {
-      if (node.parent) node.scale.setScalar(1 + Math.sin(this.clock.elapsedTime * 2.5 + node.userData.pulse) * 0.06);
-    }, 50);
-
-    this.shake.add(0.06);
-    this.audio.playMineHit();
-    this.particles.spawn(
-      hit.point,
-      ITEM_COLORS[node.userData.itemId] || 0xaabbcc,
-      8 + Math.floor((1 - newRatio) * 6)
-    );
     this.ui.flashCrosshair();
-
-    this.player.spendMining(delta);
-    this.player.mineCooldown = 0.22;
+    this.audio.playMineHit();
+    this.shake.add(0.035 / Math.max(mult, 0.35));
+    this.particles?.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 8);
+    node.scale.setScalar(0.92);
+    setTimeout(() => {
+      if (node.parent) node.scale.setScalar(1);
+    }, 50);
 
     if (node.userData.hp <= 0) {
       this.audio.playMineBreak();
-      this.shake.add(0.12);
-      this.particles.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 18);
+      this.shake.add(0.1);
+      this.particles?.spawn(hit.point, ITEM_COLORS[node.userData.itemId] || 0xffffff, 16);
       this.inventory.addItem(node.userData.itemId, node.userData.drop);
       this.world.group.remove(node);
       this.world.resources = this.world.resources.filter((r) => r !== node);
+      this.world.wreckage = this.world.wreckage.filter((r) => r !== node);
       this.miningTarget = null;
       this.ui.setCrosshairMining(false);
       if (!this.triggers.mine) {
@@ -337,27 +414,149 @@ export class Game {
 
   _tryInteract() {
     const hits = this._getLookTargets(CONST.INTERACT_RANGE);
-    const hit = hits.find((h) => this._findGameObject(h.object).userData.kind === "wreckage");
+    const hit = hits[0];
     if (!hit) return;
-    const wreck = this._findGameObject(hit.object);
-    if (!wreck.userData.looted) {
-      wreck.userData.looted = true;
-      this.inventory.addItem(wreck.userData.lootItem, wreck.userData.lootAmount);
-      this.ui.showEva(
-        `Обломок Aurora: получено ${ITEM_NAMES[wreck.userData.lootItem]} x${wreck.userData.lootAmount}.`
-      );
-    }
-    if (wreck.userData.isCore) {
-      if (!this.triggers.aurora) {
-        this.triggers.aurora = true;
-        // Milestone reward — game continues as open sandbox.
-        this.inventory.addItem(ItemId.CIRCUIT, 2);
-        this.inventory.addItem(ItemId.METAL_PLATE, 2);
-        this.ui.showEva(EVA_MESSAGES.auroraCore, 10);
+    const obj = this._findGameObject(hit.object);
+
+    if (obj.userData.kind === "building" && obj.userData.buildingId === BuildingId.HANGAR) {
+      if (this.inventory.getCount(ItemId.SHIP_KIT) > 0) {
+        this.inventory.removeItem(ItemId.SHIP_KIT, 1);
+        const p = obj.position.clone();
+        p.z += 8;
+        this.world.addShip(p);
+        this.triggers.ship = true;
+        this.ui.showEva(EVA_MESSAGES.shipReady, 8);
+      } else if (!this.triggers.hangar) {
+        this.triggers.hangar = true;
+        this.ui.showEva(EVA_MESSAGES.hangar, 8);
       } else {
-        this.ui.showEva(EVA_MESSAGES.auroraCoreRepeat, 4);
+        const parts = this.inventory.getCount(ItemId.WRECK_PART);
+        this.ui.showEva(
+          `Ангар онлайн. Обломков: ${parts}/${CONST.SHIP_PARTS_NEEDED}. Скрафтите «Набор корабля», затем E у ангара.`,
+          6
+        );
+      }
+      return;
+    }
+
+    if (obj.userData.kind === "building" && obj.userData.buildingId === BuildingId.O2_FILLER) {
+      this.player.applyGeneratorO2(40);
+      this.ui.showEva("Баллон заправлен у O₂ станции.", 3);
+    }
+  }
+
+  _tryShip() {
+    if (this.mode === "space") {
+      this._landOnNearestPlanet();
+      return;
+    }
+    const hits = this._getLookTargets(5);
+    const shipHit = hits.find((h) => this._findGameObject(h.object).userData.kind === "ship");
+    const nearShip =
+      !!shipHit ||
+      this.world.ships.some((s) => s.position.distanceTo(this.player.position) < 10);
+    if (!nearShip) {
+      if (this.world.ships.length === 0) {
+        this.ui.showEva("Нет корабля. Постройте ангар и соберите набор корабля.", 4);
+      } else {
+        this.ui.showEva("Подойдите ближе к кораблю и нажмите F.", 3);
+      }
+      return;
+    }
+    this._enterSpace();
+  }
+
+  _enterSpace() {
+    this.mode = "space";
+    this.buildMode = false;
+    if (this.preview) {
+      this.scene.remove(this.preview);
+      this.preview = null;
+    }
+    this.ui.toggleBuild(false);
+    if (this.world) this.world.dispose();
+    this.world = {
+      seed: 0,
+      group: new THREE.Group(),
+      resources: [],
+      buildings: [],
+      ships: [],
+      wreckage: [],
+      dispose() {
+        this.group.parent?.remove(this.group);
+      },
+      updateChunks() {},
+      updateDayNight() {},
+      surfaceY: () => 0,
+    };
+    this.scene.add(this.world.group);
+    this.scene.background = new THREE.Color(0x02050c);
+    this.scene.fog = null;
+    const stars = new THREE.Points(
+      new THREE.BufferGeometry().setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          Float32Array.from({ length: 6000 }, () => (Math.random() - 0.5) * 800),
+          3
+        )
+      ),
+      new THREE.PointsMaterial({ color: 0xffffff, size: 0.7 })
+    );
+    this.world.group.add(stars);
+    this._clearSpaceMarkers();
+    for (let i = 0; i < 5; i++) {
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(3 + i * 0.4, 16, 16),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color().setHSL(0.55 + i * 0.08, 0.5, 0.45),
+          emissive: 0x113355,
+          emissiveIntensity: 0.35,
+        })
+      );
+      marker.position.set((i - 2) * 40, (i % 2) * 10, -60 - i * 25);
+      marker.userData = { kind: "planetMarker", planetId: this.planetIndex + 1 + i };
+      this.world.group.add(marker);
+      this.spaceMarkers.push(marker);
+    }
+    this.player.flying = true;
+    this.player.position.set(0, 5, 30);
+    this.ui.showEva("Космос. Летите к планете (WASD/Space/Ctrl) и нажмите G или F для посадки.", 8);
+  }
+
+  _updateSpace() {
+    // gentle marker spin
+    for (const m of this.spaceMarkers) m.rotation.y += 0.003;
+  }
+
+  _landOnNearestPlanet() {
+    if (this.spaceMarkers.length === 0) return;
+    let best = this.spaceMarkers[0];
+    let bestD = best.position.distanceTo(this.player.position);
+    for (const m of this.spaceMarkers) {
+      const d = m.position.distanceTo(this.player.position);
+      if (d < bestD) {
+        best = m;
+        bestD = d;
       }
     }
+    if (bestD > 25) {
+      this.ui.showEva("Подлетите ближе к планете для посадки.", 3);
+      return;
+    }
+    const nextPlanet = best.userData.planetId;
+    this.player.flying = false;
+    this._clearSpaceMarkers();
+    this.start((nextPlanet * 9973 + 42) >>> 0, {
+      keepInventory: true,
+      planetIndex: nextPlanet,
+    });
+  }
+
+  _clearSpaceMarkers() {
+    for (const m of this.spaceMarkers) {
+      m.parent?.remove(m);
+    }
+    this.spaceMarkers = [];
   }
 
   _refreshPreview() {
@@ -366,15 +565,14 @@ export class Game {
       this.preview = null;
     }
     if (!this.buildMode) return;
+    const size = this.selectedBuilding === BuildingId.HANGAR ? 8 : 2;
     this.preview = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 1, 2),
+      new THREE.BoxGeometry(size, 1, size === 8 ? 10 : 2),
       new THREE.MeshStandardMaterial({
         color: 0x66aaff,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.4,
         depthWrite: false,
-        emissive: 0x2266aa,
-        emissiveIntensity: 0.4,
       })
     );
     this.scene.add(this.preview);
@@ -388,38 +586,27 @@ export class Game {
     const g = CONST.BUILD_GRID;
     x = Math.round(x / g) * g;
     z = Math.round(z / g) * g;
-    const groundY = this.world.surfaceY(x, z);
-    this.preview.position.set(x, groundY + 0.6, z);
+    this.preview.position.set(x, this.world.surfaceY(x, z) + 0.6, z);
   }
 
   _placeBuilding() {
     if (!this.crafting.canBuild(this.selectedBuilding) || !this.preview) return;
     if (!this.crafting.consumeBuild(this.selectedBuilding)) return;
     const pos = this.preview.position.clone();
-    pos.y = this.world.surfaceY(pos.x, pos.z);
     this.world.addBuilding(this.selectedBuilding, pos);
     if (!this.triggers.build) {
       this.triggers.build = true;
       this.ui.showEva(EVA_MESSAGES.firstBuild);
     }
-  }
-
-  _applyGeneratorBuff(delta) {
-    for (const b of this.world.buildings) {
-      if (b.userData.buildingId !== BuildingId.GENERATOR) continue;
-      if (b.position.distanceTo(this.player.position) <= CONST.GENERATOR_O2_RADIUS) {
-        this.player.applyGeneratorO2(CONST.GENERATOR_O2_RATE * delta);
-      }
+    if (this.selectedBuilding === BuildingId.HANGAR) {
+      this.ui.showEva(EVA_MESSAGES.hangar, 8);
     }
   }
 
   _onResize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.camera.aspect = w / h;
+    this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
-    this.composer.setSize(w, h);
-    this.bloomPass.resolution.set(w, h);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 }

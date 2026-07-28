@@ -37,7 +37,11 @@
         <div class="bar-row"><span>O2</span><div class="bar"><i id="bar-o2"></i></div></div>
         <div class="bar-row"><span>Energy</span><div class="bar energy"><i id="bar-energy"></i></div></div>
         <div class="bar-row"><span>Health</span><div class="bar health"><i id="bar-health"></i></div></div>
+        <div class="bar-row"><span>Food</span><div class="bar hunger"><i id="bar-hunger"></i></div></div>
+        <div class="bar-row"><span>Water</span><div class="bar thirst"><i id="bar-thirst"></i></div></div>
         <div class="bar-row"><span>Temp</span><strong id="temp-value">22°C</strong></div>
+        <div class="bar-row"><span>Tool</span><strong id="tool-value">руками</strong></div>
+        <div class="bar-row"><span>Mode</span><strong id="mode-value">Планета #0</strong></div>
       </div>
       <div id="crosshair">
         <span class="ch-line ch-top"></span>
@@ -46,7 +50,7 @@
         <span class="ch-line ch-right"></span>
         <span class="ch-dot"></span>
       </div>
-      <div id="hint-label">WASD — движение | Shift — бег | ЛКМ — добыча | E — взаимодействие | Tab — инвентарь | C — крафт | B — строительство</div>
+      <div id="hint-label">WASD | Shift бег | ЛКМ добыча | E ангар/заправка | F корабль/космос | Tab инвентарь | C крафт | B стройка</div>
       <div id="eva-box" class="hidden">
         <div class="eva-header"><span class="eva-badge">EVA</span><span class="eva-channel">COMMS // UNKNOWN SECTOR</span></div>
         <p id="eva-text"></p>
@@ -55,6 +59,7 @@
 
     <div id="inventory-panel" class="side-panel left hidden">
       <h2>Inventory (Tab)</h2>
+      <p class="panel-note">Клик по предмету: экипировать инструмент, съесть еду, выпить воду или улучшить баллон O₂</p>
       <div id="inventory-slots" class="slots"></div>
     </div>
 
@@ -66,7 +71,7 @@
     </div>
 
     <div id="build-panel" class="side-panel bottom hidden">
-      <h2>Строительство (B) — клавиши 1–5</h2>
+      <h2>Строительство (B) — клавиши 1–8</h2>
       <div id="build-list" class="build-list"></div>
     </div>
 

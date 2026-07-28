@@ -1,11 +1,5 @@
 import * as THREE from "three";
-import {
-  BuildingId,
-  CONST,
-  ITEM_COLORS,
-  ItemId,
-} from "./constants.js";
-import { TextureLibrary } from "./proceduralTextures.js";
+import { CONST, ItemId, ITEM_COLORS } from "./constants.js";
 
 function hash2(x, z) {
   const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
@@ -32,827 +26,401 @@ function noise2(x, z) {
 
 function fbm(x, z) {
   return (
-    noise2(x * 0.04, z * 0.04) * 1.0 +
-    noise2(x * 0.08, z * 0.08) * 0.3 +
-    noise2(x * 0.16, z * 0.16) * 0.12
+    noise2(x * 0.035, z * 0.035) +
+    noise2(x * 0.07, z * 0.07) * 0.45 +
+    noise2(x * 0.14, z * 0.14) * 0.2
   );
 }
 
 export function getHeight(x, z, seed = 42) {
-  const ox = seed * 0.17;
-  const oz = seed * 0.31;
-  return (fbm(x / CONST.PLANET_SCALE + ox, z / CONST.PLANET_SCALE + oz) * 2 - 1) * CONST.TERRAIN_HEIGHT;
+  const ox = seed * 0.13;
+  const oz = seed * 0.29;
+  return (fbm(x * 0.04 + ox, z * 0.04 + oz) * 2 - 1) * CONST.TERRAIN_HEIGHT;
 }
 
-function terrainBlend(x, y, z, seed) {
-  const heightT = THREE.MathUtils.clamp((y + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2), 0, 1);
-  const slope =
-    Math.abs(getHeight(x + 1, z, seed) - getHeight(x - 1, z, seed)) +
-    Math.abs(getHeight(x, z + 1, seed) - getHeight(x, z - 1, seed));
-  const slopeT = THREE.MathUtils.clamp(slope * 0.15, 0, 1);
-  const grassW = THREE.MathUtils.clamp((1 - heightT * 1.4) * (1 - slopeT * 0.85), 0, 1);
-  const rockW = THREE.MathUtils.clamp(slopeT * 0.9 + Math.max(0, heightT - 0.55) * 1.2, 0, 1);
-  const dirtW = THREE.MathUtils.clamp(1 - grassW - rockW, 0, 1);
-  const sum = grassW + dirtW + rockW || 1;
-  return { grassW: grassW / sum, dirtW: dirtW / sum, rockW: rockW / sum };
+function makeTerrainMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0x4a7a45,
+    roughness: 0.92,
+    metalness: 0.04,
+    flatShading: false,
+  });
 }
 
-function createGrassBladeGeometry() {
-  const geo = new THREE.PlaneGeometry(0.12, 0.75, 1, 4);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    const t = (y + 0.375) / 0.75;
-    const bend = t * t * 0.08;
-    pos.setX(i, pos.getX(i) + bend);
-  }
-  geo.translate(0, 0.375, 0);
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function bakeTerrainMap(size, worldHalf, seed, grassTex, dirtTex, rockTex) {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const ctx = c.getContext("2d");
-  const gCtx = grassTex.image.getContext("2d");
-  const dCtx = dirtTex.image.getContext("2d");
-  const rCtx = rockTex.image.getContext("2d");
-  const img = ctx.createImageData(size, size);
-
-  for (let py = 0; py < size; py++) {
-    for (let px = 0; px < size; px++) {
-      const wx = (px / size - 0.5) * worldHalf * 2;
-      const wz = (py / size - 0.5) * worldHalf * 2;
-      const wy = getHeight(wx, wz, seed);
-      const { grassW, dirtW, rockW } = terrainBlend(wx, wy, wz, seed);
-      const n = noise2(wx * 0.05 + seed, wz * 0.05) * 0.06;
-
-      const gu = (Math.abs(Math.floor(wx * 64)) % 256);
-      const gv = (Math.abs(Math.floor(wz * 64)) % 256);
-      const g = gCtx.getImageData(gu | 0, gv | 0, 1, 1).data;
-      const d = dCtx.getImageData(gu | 0, gv | 0, 1, 1).data;
-      const r = rCtx.getImageData(gu | 0, gv | 0, 1, 1).data;
-
-      const i = (py * size + px) * 4;
-      img.data[i] = (g[0] * grassW + d[0] * dirtW + r[0] * rockW) * (1 + n);
-      img.data[i + 1] = (g[1] * grassW + d[1] * dirtW + r[1] * rockW) * (1 + n);
-      img.data[i + 2] = (g[2] * grassW + d[2] * dirtW + r[2] * rockW) * (1 + n);
-      img.data[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
-}
-
-function buildResourceCluster(itemId, textures) {
+function createResourceNode(itemId, x, y, z) {
   const group = new THREE.Group();
-  const color = ITEM_COLORS[itemId];
-  const crystalKey = ["stone", "iron", "copper", "silicon", "organic"][itemId];
-  const crystalTex = textures.crystals[crystalKey];
-
-  const baseMat = new THREE.MeshStandardMaterial({
-    map: crystalTex,
-    color,
-    emissive: color,
-    emissiveIntensity: 0.45,
-    roughness: 0.25,
-    metalness: 0.65,
-    flatShading: true,
-  });
-
-  const glowMat = new THREE.MeshStandardMaterial({
-    color,
-    emissive: color,
-    emissiveIntensity: 1.2,
-    roughness: 0.15,
-    metalness: 0.2,
-    transparent: true,
-    opacity: 0.85,
-    flatShading: true,
-  });
-
-  const configs = {
-    [ItemId.STONE]: () => {
-      for (let i = 0; i < 5; i++) {
-        const s = 0.25 + hash2(i, 1) * 0.25;
-        const m = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), baseMat);
-        m.position.set((hash2(i, 2) - 0.5) * 0.7, s * 0.4, (hash2(i, 3) - 0.5) * 0.7);
-        m.rotation.set(hash2(i, 4) * 2, hash2(i, 5) * 2, hash2(i, 6) * 2);
-        m.castShadow = true;
-        group.add(m);
-      }
-    },
-    [ItemId.IRON]: () => {
-      for (let i = 0; i < 4; i++) {
-        const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.28 + i * 0.04, 0), baseMat);
-        m.position.set(Math.cos(i * 1.4) * 0.35, 0.2 + i * 0.08, Math.sin(i * 1.4) * 0.35);
-        m.rotation.y = i * 0.9;
-        m.castShadow = true;
-        group.add(m);
-      }
-      const core = new THREE.Mesh(new THREE.TetrahedronGeometry(0.18, 0), glowMat);
-      core.position.y = 0.45;
-      group.add(core);
-    },
-    [ItemId.COPPER]: () => {
-      for (let i = 0; i < 6; i++) {
-        const m = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55 + hash2(i, 7) * 0.2, 4), baseMat);
-        m.position.set((hash2(i, 8) - 0.5) * 0.6, 0.25, (hash2(i, 9) - 0.5) * 0.6);
-        m.rotation.set(hash2(i, 10), hash2(i, 11) * Math.PI, hash2(i, 12));
-        m.castShadow = true;
-        group.add(m);
-      }
-    },
-    [ItemId.SILICON]: () => {
-      for (let i = 0; i < 5; i++) {
-        const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), glowMat);
-        m.position.set(Math.cos(i * 1.25) * 0.3, 0.15 + i * 0.12, Math.sin(i * 1.25) * 0.3);
-        m.rotation.set(0.4, i * 0.7, 0.3);
-        m.castShadow = true;
-        group.add(m);
-      }
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6), glowMat);
-      beam.position.y = 0.55;
-      group.add(beam);
-    },
-    [ItemId.ORGANIC]: () => {
-      for (let i = 0; i < 4; i++) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.22 + hash2(i, 13) * 0.12, 8, 6), baseMat);
-        m.position.set((hash2(i, 14) - 0.5) * 0.5, 0.18 + i * 0.06, (hash2(i, 15) - 0.5) * 0.5);
-        m.scale.y = 0.7;
-        m.castShadow = true;
-        group.add(m);
-      }
-      const spore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), glowMat);
-      spore.position.y = 0.55;
-      group.add(spore);
-    },
-  };
-
-  (configs[itemId] || configs[ItemId.STONE])();
-  return group;
-}
-
-function buildWreckageGroup(isCore, textures) {
-  const group = new THREE.Group();
-  const hullMat = new THREE.MeshStandardMaterial({
-    map: textures.metal,
-    color: isCore ? 0x5a7088 : 0x4a5258,
-    metalness: 0.88,
-    roughness: 0.28,
-    emissive: isCore ? 0x224466 : 0x0a1018,
-    emissiveIntensity: isCore ? 0.35 : 0.08,
-  });
-  const panelMat = new THREE.MeshStandardMaterial({
-    map: textures.metalDark,
-    color: 0x3a4248,
-    metalness: 0.92,
-    roughness: 0.22,
-  });
-  const engineMat = new THREE.MeshStandardMaterial({
-    map: textures.metalBlue,
-    color: 0x3a6090,
-    metalness: 0.85,
-    roughness: 0.18,
-    emissive: isCore ? 0x2266cc : 0x112233,
-    emissiveIntensity: isCore ? 1.4 : 0.25,
-  });
-
-  const scale = isCore ? 1.35 : 1;
-
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(2.8 * scale, 1.2 * scale, 1.8 * scale), hullMat);
-  hull.position.y = 0.5 * scale;
-  hull.castShadow = true;
-  hull.receiveShadow = true;
-  group.add(hull);
-
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6 * scale, 0.08, 2.2 * scale), panelMat);
-  panel.position.set(0, 1.15 * scale, 0.3);
-  panel.rotation.x = -0.35;
-  panel.castShadow = true;
-  group.add(panel);
-
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.8 * scale, 0.15), panelMat);
-  beam.position.set(-1.1 * scale, 0.9 * scale, -0.5 * scale);
-  beam.rotation.z = 0.25;
-  beam.castShadow = true;
-  group.add(beam);
-
-  const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.35 * scale, 0.5 * scale, 0.9 * scale, 10), engineMat);
-  engine.position.set(1.2 * scale, 0.45 * scale, -0.6 * scale);
-  engine.rotation.z = Math.PI / 2;
-  engine.castShadow = true;
-  group.add(engine);
-
-  const pipe = new THREE.Mesh(new THREE.TorusGeometry(0.4 * scale, 0.05, 6, 16, Math.PI), panelMat);
-  pipe.position.set(-0.5 * scale, 0.7 * scale, 0.8 * scale);
-  pipe.rotation.x = Math.PI / 2;
-  group.add(pipe);
-
-  if (isCore) {
-    const coreGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 16, 16),
+  const color = ITEM_COLORS[itemId] || 0x888888;
+  let mesh;
+  if (itemId === ItemId.WOOD) {
+    mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6),
+      new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 })
+    );
+    mesh.position.y = 0.8;
+    const canopy = new THREE.Mesh(
+      new THREE.SphereGeometry(0.9, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.85 })
+    );
+    canopy.position.y = 1.7;
+    group.add(mesh, canopy);
+  } else if (itemId === ItemId.CLAY) {
+    mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 8, 6),
+      new THREE.MeshStandardMaterial({ color, roughness: 1 })
+    );
+    mesh.scale.set(1.4, 0.55, 1.1);
+    mesh.position.y = 0.25;
+    group.add(mesh);
+  } else if (itemId === ItemId.FOOD) {
+    // Simple animal
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.25, 0.5, 4, 8),
+      new THREE.MeshStandardMaterial({ color: 0xc4a484 })
+    );
+    body.rotation.z = Math.PI / 2;
+    body.position.y = 0.45;
+    group.add(body);
+  } else if (itemId === ItemId.WATER) {
+    mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.7, 0.7, 0.15, 12),
       new THREE.MeshStandardMaterial({
-        color: 0x4488ff,
-        emissive: 0x3388ff,
-        emissiveIntensity: 2.5,
-        roughness: 0.1,
-        metalness: 0.3,
+        color: 0x3a8fd6,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.75,
+        roughness: 0.2,
       })
     );
-    coreGlow.position.set(0, 0.55 * scale, 0);
-    group.add(coreGlow);
-
-    for (let i = 0; i < 3; i++) {
-      const shard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 1.2), panelMat);
-      shard.position.set((i - 1) * 1.1 * scale, 0.15, -1.1 * scale);
-      shard.rotation.y = (i - 1) * 0.4;
-      shard.castShadow = true;
-      group.add(shard);
-    }
+    mesh.position.y = 0.05;
+    group.add(mesh);
+  } else if (itemId === ItemId.SEEDS || itemId === ItemId.ORGANIC) {
+    mesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.35, 0.9, 6),
+      new THREE.MeshStandardMaterial({ color: 0x3d9a4a })
+    );
+    mesh.position.y = 0.45;
+    group.add(mesh);
+  } else if (itemId === ItemId.WRECK_PART) {
+    mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2, 0.4, 0.8),
+      new THREE.MeshStandardMaterial({
+        color: 0x6a7a8a,
+        metalness: 0.7,
+        roughness: 0.35,
+        emissive: 0x112233,
+        emissiveIntensity: 0.3,
+      })
+    );
+    mesh.position.y = 0.25;
+    group.add(mesh);
   } else {
-    const debris = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 1.4), hullMat);
-    debris.position.set(0.8 * scale, 0.12, 0.9 * scale);
-    debris.rotation.y = 0.6;
-    debris.castShadow = true;
-    group.add(debris);
+    mesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.45, 0),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.25,
+        metalness: 0.4,
+        roughness: 0.4,
+      })
+    );
+    mesh.position.y = 0.45;
+    group.add(mesh);
   }
-
+  group.position.set(x, y, z);
+  group.userData = {
+    kind: "resource",
+    itemId,
+    drop: itemId === ItemId.WRECK_PART ? 1 : 2 + ((Math.abs(x * 10) | 0) % 3),
+    hp: 70,
+    maxHp: 70,
+  };
+  group.traverse((c) => {
+    if (c.isMesh) {
+      c.castShadow = true;
+      c.userData = group.userData;
+    }
+  });
   return group;
 }
 
-export class World {
-  constructor(scene, seed = 42) {
+export class ChunkWorld {
+  constructor(scene, seed) {
     this.scene = scene;
     this.seed = seed;
-    this.resources = [];
-    this.wreckage = [];
-    this.buildings = [];
-    this.spawn = new THREE.Vector3(0, 0, 0);
     this.group = new THREE.Group();
-    this.textures = new TextureLibrary();
-    this.dayFactor = 1;
     scene.add(this.group);
+    this.chunks = new Map();
+    this.resources = [];
+    this.buildings = [];
+    this.wreckage = [];
+    this.ships = [];
+    this.hangars = [];
+    this.spawn = new THREE.Vector3(0, 0, 0);
+    this.terrainMat = makeTerrainMaterial();
+    this._sky();
+  }
+
+  key(cx, cz) {
+    return `${cx},${cz}`;
   }
 
   build() {
-    this._makeStars();
-    this._makeSky();
-    this._makeTerrain();
-    this._makeGrass();
-    this._makeTrees();
-    this._makeDust();
-    this._makePod();
-    this._spawnResources();
-    this._spawnWreckage();
+    this.spawn.set(0, getHeight(0, 0, this.seed) + 1.6, 2);
+    this.updateChunks(0, 0);
+    // Guarantee starter resources near spawn
+    this._ensureStarter();
   }
 
-  dispose() {
-    this.scene.remove(this.group);
-    if (this.stars) {
-      this.scene.remove(this.stars);
-      this.stars.geometry.dispose();
-      this.stars.material.dispose();
-      this.stars = null;
-    }
-    this.group.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
-        else obj.material.dispose();
-      }
-    });
-    if (this.terrainMap) this.terrainMap.dispose();
-    this.textures.dispose();
-    this.resources = [];
-    this.wreckage = [];
-    this.buildings = [];
-  }
-
-  _makeStars() {
-    const count = 2800;
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    for (let i = 0; i < count; i++) {
-      const r = 180 + Math.random() * 100;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.cos(phi) * 0.6 + 20;
-      positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-      sizes[i] = 0.35 + Math.random() * 0.65;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
-    this.stars = new THREE.Points(
-      geo,
-      new THREE.PointsMaterial({
-        color: 0xddeeff,
-        size: 0.55,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
-        sizeAttenuation: true,
-      })
-    );
-    this.scene.add(this.stars);
-  }
-
-  _makeSky() {
-    this.hemi = new THREE.HemisphereLight(0x9ec4ff, 0x1a2e1a, 0.55);
-    this.group.add(this.hemi);
-
-    this.ambient = new THREE.AmbientLight(0x334466, 0.25);
-    this.group.add(this.ambient);
-
-    this.sun = new THREE.DirectionalLight(0xfff0d4, 1.35);
-    this.sun.position.set(40, 60, 20);
+  _sky() {
+    const hemi = new THREE.HemisphereLight(0x9ec9ff, 0x2a3a28, 0.9);
+    this.group.add(hemi);
+    this.sun = new THREE.DirectionalLight(0xfff1d6, 1.15);
+    this.sun.position.set(40, 70, 25);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 180;
-    const s = 70;
-    this.sun.shadow.camera.left = -s;
-    this.sun.shadow.camera.right = s;
-    this.sun.shadow.camera.top = s;
-    this.sun.shadow.camera.bottom = -s;
-    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.mapSize.set(1024, 1024);
     this.group.add(this.sun);
 
-    // Distant planet
-    this.distantPlanet = new THREE.Mesh(
-      new THREE.SphereGeometry(12, 48, 48),
-      new THREE.MeshStandardMaterial({
-        map: this.textures.planet,
-        roughness: 0.85,
-        metalness: 0.05,
-      })
+    const stars = new THREE.Points(
+      new THREE.BufferGeometry().setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          Float32Array.from({ length: 1500 }, () => (Math.random() - 0.5) * 400),
+          3
+        )
+      ),
+      new THREE.PointsMaterial({ color: 0xffffff, size: 0.45, sizeAttenuation: true })
     );
-    this.distantPlanet.position.set(90, 55, -120);
-    this.group.add(this.distantPlanet);
+    this.group.add(stars);
 
-    const planetAtmo = new THREE.Mesh(
-      new THREE.SphereGeometry(12.8, 32, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x6699cc,
-        transparent: true,
-        opacity: 0.12,
-        side: THREE.BackSide,
-        depthWrite: false,
-      })
+    const planet = new THREE.Mesh(
+      new THREE.SphereGeometry(14, 24, 24),
+      new THREE.MeshStandardMaterial({ color: 0x4a6fa5, roughness: 0.8, emissive: 0x102040, emissiveIntensity: 0.2 })
     );
-    planetAtmo.position.copy(this.distantPlanet.position);
-    this.group.add(planetAtmo);
-
-    // Anomaly sphere with texture + atmosphere rim
-    this.anomaly = new THREE.Mesh(
-      new THREE.SphereGeometry(3, 48, 48),
-      new THREE.MeshStandardMaterial({
-        map: this.textures.anomaly,
-        color: 0x8866ff,
-        emissive: 0x5533ff,
-        emissiveIntensity: 2.2,
-        emissiveMap: this.textures.anomaly,
-        roughness: 0.15,
-        metalness: 0.2,
-        transparent: true,
-        opacity: 0.95,
-      })
-    );
-    this.anomaly.position.set(-40, 35, -50);
-    this.group.add(this.anomaly);
-
-    this.anomalyAtmo = new THREE.Mesh(
-      new THREE.SphereGeometry(3.6, 32, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0xaa66ff,
-        transparent: true,
-        opacity: 0.18,
-        side: THREE.BackSide,
-        depthWrite: false,
-      })
-    );
-    this.anomalyAtmo.position.copy(this.anomaly.position);
-    this.group.add(this.anomalyAtmo);
-
-    // Multi-band ring system
-    this.rings = new THREE.Group();
-    const ringConfigs = [
-      { r: 18, tube: 0.5, opacity: 0.55, tilt: 0 },
-      { r: 22, tube: 0.9, opacity: 0.35, tilt: 0.08 },
-      { r: 26, tube: 1.4, opacity: 0.22, tilt: -0.05 },
-    ];
-    for (const cfg of ringConfigs) {
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(cfg.r, cfg.tube, 2, 128),
-        new THREE.MeshStandardMaterial({
-          map: this.textures.ring,
-          color: 0xd0e0f8,
-          transparent: true,
-          opacity: cfg.opacity,
-          emissive: 0x446688,
-          emissiveIntensity: 0.45,
-          roughness: 0.35,
-          metalness: 0.55,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        })
-      );
-      ring.rotation.x = 1.2 + cfg.tilt;
-      ring.rotation.z = 0.25;
-      this.rings.add(ring);
-    }
-    this.rings.position.set(0, 60, -80);
-    this.group.add(this.rings);
+    planet.position.set(-70, 45, -100);
+    this.group.add(planet);
   }
 
-  _makeTerrain() {
-    const size = CONST.PLANET_SIZE;
-    const scale = CONST.PLANET_SCALE;
-    const worldHalf = (size * scale) / 2;
-    const geo = new THREE.PlaneGeometry(size * scale, size * scale, size, size);
+  _ensureStarter() {
+    const starters = [
+      [ItemId.WOOD, 4, 0, 6],
+      [ItemId.WOOD, -5, 0, 8],
+      [ItemId.WOOD, 7, 0, -4],
+      [ItemId.CLAY, 3, 0, 10],
+      [ItemId.CLAY, -8, 0, 5],
+      [ItemId.STONE, 6, 0, 3],
+      [ItemId.WATER, -3, 0, 12],
+      [ItemId.FOOD, 10, 0, 2],
+      [ItemId.SEEDS, 2, 0, -8],
+      [ItemId.WRECK_PART, 12, 0, 12],
+      [ItemId.WRECK_PART, -14, 0, 9],
+    ];
+    for (const [id, x, , z] of starters) {
+      const y = getHeight(x, z, this.seed);
+      const node = createResourceNode(id, x, y, z);
+      this.group.add(node);
+      this.resources.push(node);
+      if (id === ItemId.WRECK_PART) this.wreckage.push(node);
+    }
+  }
+
+  worldToChunk(x, z) {
+    const s = CONST.CHUNK_SIZE;
+    return [Math.floor(x / s), Math.floor(z / s)];
+  }
+
+  updateChunks(px, pz) {
+    const [pcx, pcz] = this.worldToChunk(px, pz);
+    const need = new Set();
+    const r = CONST.CHUNK_LOAD_RADIUS;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        need.add(this.key(pcx + dx, pcz + dz));
+        if (!this.chunks.has(this.key(pcx + dx, pcz + dz))) {
+          this._spawnChunk(pcx + dx, pcz + dz);
+        }
+      }
+    }
+    for (const [k, chunk] of [...this.chunks.entries()]) {
+      if (!need.has(k)) {
+        this._disposeChunk(k, chunk);
+      }
+    }
+  }
+
+  _spawnChunk(cx, cz) {
+    const size = CONST.CHUNK_SIZE;
+    const res = CONST.CHUNK_RES;
+    const geo = new THREE.PlaneGeometry(size, size, res, res);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
-    const uvs = [];
+    const colors = [];
+    const ox = cx * size + size / 2;
+    const oz = cz * size + size / 2;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const y = getHeight(x, z, this.seed);
+      const lx = pos.getX(i);
+      const lz = pos.getZ(i);
+      const wx = ox + lx;
+      const wz = oz + lz;
+      const y = getHeight(wx, wz, this.seed);
       pos.setY(i, y);
-      uvs.push((x / worldHalf + 1) * 0.5, (z / worldHalf + 1) * 0.5);
+      const t = THREE.MathUtils.clamp((y + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2), 0, 1);
+      colors.push(0.25 + t * 0.15, 0.45 + (1 - t) * 0.25, 0.22);
     }
-    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
+    const mat = this.terrainMat.clone();
+    mat.vertexColors = true;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(ox, 0, oz);
+    mesh.receiveShadow = true;
+    mesh.userData.chunk = true;
+    this.group.add(mesh);
 
-    this.terrainMap = bakeTerrainMap(512, worldHalf, this.seed, this.textures.grass, this.textures.dirt, this.textures.rock);
+    const nodes = [];
+    // Skip (0,0) dense spawn handled by starter
+    if (!(cx === 0 && cz === 0)) {
+      const count = 4 + ((hash2(cx + this.seed, cz) * 6) | 0);
+      for (let i = 0; i < count; i++) {
+        const lx = (hash2(cx, i * 3 + cz) - 0.5) * size * 0.85;
+        const lz = (hash2(cz, i * 7 + cx) - 0.5) * size * 0.85;
+        const wx = ox + lx;
+        const wz = oz + lz;
+        const wy = getHeight(wx, wz, this.seed);
+        const roll = hash2(wx * 0.1, wz * 0.1 + this.seed);
+        let id = ItemId.WOOD;
+        if (roll < 0.12) id = ItemId.WRECK_PART;
+        else if (roll < 0.28) id = ItemId.CLAY;
+        else if (roll < 0.4) id = ItemId.STONE;
+        else if (roll < 0.5) id = ItemId.IRON;
+        else if (roll < 0.58) id = ItemId.COPPER;
+        else if (roll < 0.64) id = ItemId.SILICON;
+        else if (roll < 0.72) id = ItemId.FOOD;
+        else if (roll < 0.8) id = ItemId.WATER;
+        else if (roll < 0.88) id = ItemId.SEEDS;
+        else if (roll < 0.94) id = ItemId.ORGANIC;
+        const node = createResourceNode(id, wx, wy, wz);
+        this.group.add(node);
+        this.resources.push(node);
+        nodes.push(node);
+        if (id === ItemId.WRECK_PART) this.wreckage.push(node);
+      }
+    }
 
-    const mat = new THREE.MeshStandardMaterial({
-      map: this.terrainMap,
-      normalMap: this.textures.terrainNormal,
-      normalScale: new THREE.Vector2(0.65, 0.65),
-      roughness: 0.92,
-      metalness: 0.03,
-    });
-    this.terrain = new THREE.Mesh(geo, mat);
-    this.terrain.receiveShadow = true;
-    this.group.add(this.terrain);
+    this.chunks.set(this.key(cx, cz), { mesh, nodes });
   }
 
-  _makeGrass() {
-    const count = 3200;
-    const bladeGeo = createGrassBladeGeometry();
-    const mat = new THREE.MeshStandardMaterial({
-      map: this.textures.grassBlade,
-      alphaMap: this.textures.grassBlade,
-      transparent: true,
-      alphaTest: 0.35,
-      side: THREE.DoubleSide,
-      roughness: 0.95,
-      metalness: 0,
-    });
-
-    this.grass = new THREE.InstancedMesh(bladeGeo, mat, count);
-    this.grass.castShadow = false;
-    this.grass.receiveShadow = true;
-
-    const dummy = new THREE.Object3D();
-    let placed = 0;
-    let attempts = 0;
-    while (placed < count && attempts < count * 8) {
-      attempts++;
-      const r = 5 + hash2(attempts, this.seed) * 75;
-      const a = hash2(attempts * 2, this.seed) * Math.PI * 2;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const y = getHeight(x, z, this.seed);
-      const { grassW, rockW } = terrainBlend(x, y, z, this.seed);
-      if (grassW < 0.45 || rockW > 0.35) continue;
-
-      dummy.position.set(x, y, z);
-      dummy.rotation.y = hash2(attempts * 3, this.seed) * Math.PI * 2;
-      dummy.rotation.x = (hash2(attempts * 4, this.seed) - 0.5) * 0.15;
-      const s = 0.7 + hash2(attempts * 5, this.seed) * 0.8;
-      dummy.scale.set(s, s * (0.85 + hash2(attempts * 6, this.seed) * 0.3), s);
-      dummy.updateMatrix();
-      this.grass.setMatrixAt(placed, dummy.matrix);
-      placed++;
+  _disposeChunk(k, chunk) {
+    this.group.remove(chunk.mesh);
+    chunk.mesh.geometry.dispose();
+    chunk.mesh.material.dispose();
+    for (const n of chunk.nodes) {
+      this.group.remove(n);
+      this.resources = this.resources.filter((r) => r !== n);
+      this.wreckage = this.wreckage.filter((r) => r !== n);
     }
-    this.grass.count = placed;
-    this.grass.instanceMatrix.needsUpdate = true;
-    this.group.add(this.grass);
-
-    // Crossed blade clusters for depth
-    this.grass2 = new THREE.InstancedMesh(bladeGeo, mat, Math.floor(placed * 0.5));
-    let placed2 = 0;
-    for (let i = 0; i < placed && placed2 < this.grass2.count; i += 2) {
-      this.grass.getMatrixAt(i, dummy.matrix);
-      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
-      dummy.rotation.y += Math.PI * 0.5;
-      dummy.updateMatrix();
-      this.grass2.setMatrixAt(placed2++, dummy.matrix);
-    }
-    this.grass2.count = placed2;
-    this.grass2.instanceMatrix.needsUpdate = true;
-    this.group.add(this.grass2);
-  }
-
-  _makeTrees() {
-    const treeCount = 55;
-    const trunkGeo = new THREE.CylinderGeometry(0.12, 0.22, 2.4, 8);
-    trunkGeo.translate(0, 1.2, 0);
-    const trunkMat = new THREE.MeshStandardMaterial({
-      map: this.textures.bark,
-      color: 0x6a5038,
-      roughness: 0.92,
-      metalness: 0.02,
-    });
-    const canopyGeo = new THREE.IcosahedronGeometry(1.15, 1);
-    canopyGeo.translate(0, 2.8, 0);
-    const canopyMat = new THREE.MeshStandardMaterial({
-      map: this.textures.leaf,
-      color: 0x2a6838,
-      roughness: 0.88,
-      metalness: 0,
-      flatShading: true,
-    });
-
-    this.treeTrunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
-    this.treeCanopies = new THREE.InstancedMesh(canopyGeo, canopyMat, treeCount);
-    this.treeTrunks.castShadow = true;
-    this.treeCanopies.castShadow = true;
-
-    const dummy = new THREE.Object3D();
-    let placed = 0;
-    let attempts = 0;
-    while (placed < treeCount && attempts < treeCount * 12) {
-      attempts++;
-      const r = 12 + hash2(attempts + 100, this.seed) * 55;
-      const a = hash2(attempts + 200, this.seed) * Math.PI * 2;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const y = getHeight(x, z, this.seed);
-      const { grassW, rockW } = terrainBlend(x, y, z, this.seed);
-      if (grassW < 0.5 || rockW > 0.2) continue;
-      if (Math.hypot(x, z) < 6) continue;
-
-      dummy.position.set(x, y, z);
-      dummy.rotation.y = hash2(attempts, this.seed) * Math.PI * 2;
-      const s = 0.75 + hash2(attempts + 50, this.seed) * 0.55;
-      dummy.scale.set(s, s, s);
-      dummy.updateMatrix();
-      this.treeTrunks.setMatrixAt(placed, dummy.matrix);
-      this.treeCanopies.setMatrixAt(placed, dummy.matrix);
-      placed++;
-    }
-    this.treeTrunks.count = placed;
-    this.treeCanopies.count = placed;
-    this.treeTrunks.instanceMatrix.needsUpdate = true;
-    this.treeCanopies.instanceMatrix.needsUpdate = true;
-    this.group.add(this.treeTrunks);
-    this.group.add(this.treeCanopies);
-  }
-
-  _makeDust() {
-    const count = 140;
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 120;
-      positions[i * 3 + 1] = Math.random() * 8 + 1;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 120;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    this.dust = new THREE.Points(
-      geo,
-      new THREE.PointsMaterial({
-        color: 0xaaccdd,
-        size: 0.12,
-        transparent: true,
-        opacity: 0.35,
-        depthWrite: false,
-      })
-    );
-    this.group.add(this.dust);
+    this.chunks.delete(k);
   }
 
   surfaceY(x, z) {
     return getHeight(x, z, this.seed);
   }
 
-  _makePod() {
-    const h = this.surfaceY(0, 0);
-    const podBody = new THREE.Mesh(
-      new THREE.CapsuleGeometry(1.2, 1.4, 8, 16),
+  addBuilding(id, position, extra = {}) {
+    const colors = {
+      0: 0x888888,
+      1: 0x99a6bf,
+      2: 0x8c804f,
+      3: 0x4d99e6,
+      4: 0x66bfd9,
+      5: 0x6b5a40,
+      6: 0x3d8bfd,
+      7: 0x4a8f3a,
+    };
+    let geo = new THREE.BoxGeometry(2, 1.2, 2);
+    let yOff = 0.6;
+    if (id === 5) {
+      // Hangar
+      geo = new THREE.BoxGeometry(8, 4, 10);
+      yOff = 2;
+    } else if (id === 6) {
+      geo = new THREE.CylinderGeometry(0.8, 1, 2, 10);
+      yOff = 1;
+    } else if (id === 7) {
+      geo = new THREE.BoxGeometry(2.5, 0.25, 2.5);
+      yOff = 0.12;
+    }
+    const mesh = new THREE.Mesh(
+      geo,
       new THREE.MeshStandardMaterial({
-        map: this.textures.metal,
-        color: 0xbcc6d6,
-        metalness: 0.72,
-        roughness: 0.22,
-        emissive: 0x223344,
-        emissiveIntensity: 0.15,
+        color: colors[id] || 0x777777,
+        metalness: id === 5 || id === 6 ? 0.45 : 0.1,
+        roughness: 0.6,
+        emissive: id === 6 ? 0x2244aa : 0x000000,
+        emissiveIntensity: id === 6 ? 0.5 : 0,
       })
     );
-    podBody.position.set(0, h + 1.6, 0);
-    podBody.castShadow = true;
-    this.group.add(podBody);
-
-    const podWindow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.45, 12, 12),
-      new THREE.MeshStandardMaterial({
-        color: 0x88ccff,
-        emissive: 0x2266aa,
-        emissiveIntensity: 0.6,
-        roughness: 0.05,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.85,
-      })
-    );
-    podWindow.position.set(0, h + 2.1, 0.95);
-    this.group.add(podWindow);
-
-    const beacon = new THREE.PointLight(0x44aaff, 1.2, 12);
-    beacon.position.set(0, h + 3.2, 0);
-    this.group.add(beacon);
-    this.spawn.set(0, h + 1.6, 2);
-  }
-
-  _spawnResources() {
-    const types = [
-      ItemId.STONE,
-      ItemId.IRON,
-      ItemId.COPPER,
-      ItemId.SILICON,
-      ItemId.ORGANIC,
-    ];
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * Math.PI * 2;
-      const r = 8 + (i % 7) * 6 + hash2(i, this.seed) * 4;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const y = this.surfaceY(x, z);
-      const itemId = types[i % types.length];
-      const cluster = buildResourceCluster(itemId, this.textures);
-      cluster.position.set(x, y + 0.05, z);
-      cluster.rotation.y = hash2(i * 3, this.seed) * Math.PI;
-      cluster.userData = {
-        kind: "resource",
-        itemId,
-        drop: 2 + (i % 4),
-        hp: 80 + (i % 4) * 10,
-        maxHp: 80 + (i % 4) * 10,
-        baseScale: 1,
-        pulse: hash2(i, this.seed * 2) * Math.PI * 2,
-      };
-      cluster.traverse((c) => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          c.userData.kind = "resource";
-          c.userData.itemId = itemId;
-        }
-      });
-      this.group.add(cluster);
-      this.resources.push(cluster);
-    }
-  }
-
-  _spawnWreckage() {
-    const positions = [
-      [15, 10],
-      [-20, 25],
-      [30, -15],
-      [-10, -30],
-      [45, 35],
-    ];
-    positions.forEach(([x, z], i) => {
-      const y = this.surfaceY(x, z);
-      const isCore = i === 0;
-      const wreck = buildWreckageGroup(isCore, this.textures);
-      wreck.position.set(x, y, z);
-      wreck.rotation.y = hash2(x, z) * Math.PI;
-      wreck.userData = {
-        kind: "wreckage",
-        isCore,
-        looted: false,
-        lootItem: ItemId.CIRCUIT,
-        lootAmount: isCore ? 3 : 2,
-      };
-      wreck.traverse((c) => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          c.receiveShadow = true;
-          c.userData.kind = "wreckage";
-          c.userData.isCore = isCore;
-        }
-      });
-      this.group.add(wreck);
-      this.wreckage.push(wreck);
-    });
-  }
-
-  addBuilding(id, position) {
-    let geo;
-    let color = 0x8899aa;
-    let yOff = 0.15;
-    switch (id) {
-      case BuildingId.FOUNDATION:
-        geo = new THREE.BoxGeometry(2, 0.3, 2);
-        color = 0x73737a;
-        break;
-      case BuildingId.HABITAT:
-        geo = new THREE.BoxGeometry(2, 2, 2);
-        color = 0x99a6bf;
-        break;
-      case BuildingId.STORAGE:
-        geo = new THREE.BoxGeometry(2, 1.5, 2);
-        color = 0x8c804f;
-        yOff = 0.75;
-        break;
-      case BuildingId.GENERATOR:
-        geo = new THREE.CylinderGeometry(0.8, 1, 1.5, 12);
-        color = 0x4d99e6;
-        yOff = 0.75;
-        break;
-      case BuildingId.OXYGEN_STATION:
-        geo = new THREE.BoxGeometry(1.5, 2, 1.5);
-        color = 0x66bfd9;
-        yOff = 1;
-        break;
-      default:
-        geo = new THREE.BoxGeometry(1, 1, 1);
-    }
-    const mat = new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.45,
-      metalness: 0.35,
-      emissive: id === BuildingId.GENERATOR ? 0x3377ff : 0x000000,
-      emissiveIntensity: id === BuildingId.GENERATOR ? 0.75 : 0,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(position);
-    mesh.position.y += yOff;
+    mesh.position.y = this.surfaceY(position.x, position.z) + yOff;
+    mesh.userData = { kind: "building", buildingId: id, ...extra };
     mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.userData = { kind: "building", buildingId: id };
     this.group.add(mesh);
     this.buildings.push(mesh);
+    if (id === 5) this.hangars.push(mesh);
     return mesh;
+  }
+
+  addShip(position) {
+    const ship = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 0.8, 4.5),
+      new THREE.MeshStandardMaterial({ color: 0x8a9bb0, metalness: 0.7, roughness: 0.3 })
+    );
+    body.position.y = 0.6;
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(4.5, 0.12, 1.2),
+      new THREE.MeshStandardMaterial({ color: 0x5a6a7a, metalness: 0.6, roughness: 0.4 })
+    );
+    wing.position.set(0, 0.55, 0.2);
+    const cockpit = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 12, 10),
+      new THREE.MeshStandardMaterial({
+        color: 0x66ddff,
+        transparent: true,
+        opacity: 0.7,
+        emissive: 0x2288aa,
+        emissiveIntensity: 0.4,
+      })
+    );
+    cockpit.position.set(0, 1.0, -1.3);
+    ship.add(body, wing, cockpit);
+    ship.position.copy(position);
+    ship.position.y = this.surfaceY(position.x, position.z);
+    ship.userData = { kind: "ship", ready: true };
+    ship.traverse((c) => {
+      if (c.isMesh) c.userData = ship.userData;
+    });
+    this.group.add(ship);
+    this.ships.push(ship);
+    return ship;
   }
 
   updateDayNight(t) {
     if (!this.sun) return;
-    const angle = t * 0.05;
-    const sunY = 30 + Math.sin(angle) * 40;
-    this.sun.position.set(Math.cos(angle) * 50, sunY, Math.sin(angle) * 50);
-    const daylight = Math.max(Math.sin(angle), 0);
-    this.dayFactor = 0.25 + daylight * 0.75;
-    this.sun.intensity = 0.35 + daylight * 1.15;
-    this.hemi.intensity = 0.25 + daylight * 0.45;
+    const a = t * 0.04;
+    this.sun.position.set(Math.cos(a) * 55, 35 + Math.sin(a) * 40, Math.sin(a) * 55);
+    this.sun.intensity = 0.65 + Math.max(Math.sin(a), 0) * 0.7;
+  }
 
-    const skyDay = new THREE.Color(0x1a2848);
-    const skyNight = new THREE.Color(0x050810);
-    const fogDay = new THREE.Color(0x1a2848);
-    const fogNight = new THREE.Color(0x060810);
-    this.scene.background = skyNight.clone().lerp(skyDay, daylight);
-    if (this.scene.fog) {
-      this.scene.fog.color = fogNight.clone().lerp(fogDay, daylight);
-      this.scene.fog.near = 35 + daylight * 10;
-      this.scene.fog.far = 110 + daylight * 35;
-    }
-
-    if (this.anomaly) {
-      this.anomaly.material.emissiveIntensity = 1.6 + Math.sin(t * 2) * 0.4;
-      this.anomaly.rotation.y = t * 0.08;
-    }
-    if (this.anomalyAtmo) {
-      this.anomalyAtmo.rotation.y = t * 0.08;
-    }
-    if (this.distantPlanet) {
-      this.distantPlanet.rotation.y = t * 0.015;
-    }
-    if (this.rings) {
-      this.rings.rotation.y = t * 0.01;
-    }
-
-    if (this.dust) {
-      const pos = this.dust.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        pos.setY(i, pos.getY(i) + Math.sin(t + i) * 0.002);
-      }
-      pos.needsUpdate = true;
-    }
-
-    for (const r of this.resources) {
-      r.rotation.y += 0.004;
-      const pulse = 1 + Math.sin(t * 2.5 + r.userData.pulse) * 0.06;
-      r.scale.setScalar(pulse);
-    }
+  dispose() {
+    this.scene.remove(this.group);
+    this.chunks.clear();
+    this.resources = [];
+    this.buildings = [];
+    this.wreckage = [];
+    this.ships = [];
+    this.hangars = [];
   }
 }
+
+// Back-compat alias used by game.js
+export { ChunkWorld as World };

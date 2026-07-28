@@ -12,27 +12,49 @@ export class Player {
     this.pitch = 0;
     this.onGround = false;
     this.wasOnGround = true;
-    this.stats = { oxygen: 100, energy: 100, health: 100, temperature: 22 };
+    this.o2Capacity = CONST.BASE_O2_CAPACITY;
+    this.stats = {
+      oxygen: CONST.BASE_O2_CAPACITY,
+      energy: 100,
+      health: 100,
+      temperature: 22,
+      hunger: 100,
+      thirst: 100,
+    };
     this.keys = new Set();
     this.mineCooldown = 0;
     this.pointerLocked = false;
     this.walkPhase = 0;
     this.footstepTimer = 0;
-    this.baseFov = 75;
     this.targetFov = 75;
     this.onFootstep = null;
+    this.flying = false;
   }
 
-  spawn() {
-    this.position.copy(this.world.spawn);
-    this.position.y += 1.2;
+  spawn(at = null) {
+    if (at) this.position.copy(at);
+    else {
+      this.position.copy(this.world.spawn);
+      this.position.y += 1.2;
+    }
     this.velocity.set(0, 0, 0);
-    this.stats = { oxygen: 100, energy: 100, health: 100, temperature: 22 };
-    this.walkPhase = 0;
+    this.stats.oxygen = this.o2Capacity;
+    this.stats.energy = 100;
+    this.stats.health = 100;
+    this.stats.hunger = 100;
+    this.stats.thirst = 100;
+    this.flying = false;
     this._syncCamera();
   }
 
+  setOxygenCapacity(cap) {
+    this.o2Capacity = cap;
+    this.stats.oxygen = Math.min(this.stats.oxygen, cap);
+  }
+
   bindInput(dom) {
+    if (this._inputBound) return;
+    this._inputBound = true;
     window.addEventListener("keydown", (e) => {
       this.keys.add(e.code);
       if (["Tab", "Space"].includes(e.code)) e.preventDefault();
@@ -59,6 +81,11 @@ export class Player {
       return;
     }
 
+    if (this.flying) {
+      this._updateFlight(delta);
+      return;
+    }
+
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const wish = new THREE.Vector3();
@@ -74,10 +101,8 @@ export class Player {
     this.targetFov = sprint && moving ? 82 : 75;
 
     const accel = 14;
-    const targetVx = wish.x * speed;
-    const targetVz = wish.z * speed;
-    this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVx, accel, delta);
-    this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVz, accel, delta);
+    this.velocity.x = THREE.MathUtils.damp(this.velocity.x, wish.x * speed, accel, delta);
+    this.velocity.z = THREE.MathUtils.damp(this.velocity.z, wish.z * speed, accel, delta);
     this.velocity.y -= CONST.GRAVITY * delta;
 
     if (this.keys.has("Space") && this.onGround) {
@@ -91,9 +116,6 @@ export class Player {
 
     const ground = getHeight(this.position.x, this.position.z, this.world.seed) + 1.6;
     if (this.position.y <= ground) {
-      if (!this.onGround && !this.wasOnGround) {
-        // landing — handled by game via camera shake if needed
-      }
       this.position.y = ground;
       this.velocity.y = 0;
       this.onGround = true;
@@ -101,10 +123,6 @@ export class Player {
       this.onGround = false;
     }
     this.wasOnGround = this.onGround;
-
-    const lim = (CONST.PLANET_SIZE * CONST.PLANET_SCALE) / 2 - 2;
-    this.position.x = THREE.MathUtils.clamp(this.position.x, -lim, lim);
-    this.position.z = THREE.MathUtils.clamp(this.position.z, -lim, lim);
 
     if (moving && this.onGround) {
       this.walkPhase += delta * (sprint ? 11 : 8);
@@ -118,13 +136,18 @@ export class Player {
     }
 
     this.stats.oxygen -= CONST.O2_IDLE * delta;
-    this.stats.energy = Math.max(0, this.stats.energy - 0.2 * delta);
+    this.stats.hunger = Math.max(0, this.stats.hunger - CONST.HUNGER_DRAIN * delta);
+    this.stats.thirst = Math.max(0, this.stats.thirst - CONST.THIRST_DRAIN * delta);
+    this.stats.energy = Math.max(0, this.stats.energy - 0.15 * delta);
     if (moving) {
       this.stats.oxygen -= CONST.O2_MOVE * (sprint ? 1.5 : 1) * delta;
       this.stats.energy -= CONST.ENERGY_MOVE * (sprint ? 1.8 : 1) * delta;
     }
-    this.stats.oxygen = Math.max(0, this.stats.oxygen);
-    this.stats.energy = Math.max(0, this.stats.energy);
+    if (this.stats.hunger <= 0 || this.stats.thirst <= 0) {
+      this.stats.health -= 4 * delta;
+    }
+    this.stats.oxygen = Math.max(0, Math.min(this.o2Capacity, this.stats.oxygen));
+    this.stats.health = Math.max(0, this.stats.health);
     this.mineCooldown = Math.max(0, this.mineCooldown - delta);
 
     this.camera.fov = THREE.MathUtils.damp(this.camera.fov, this.targetFov, 6, delta);
@@ -132,14 +155,45 @@ export class Player {
     this._syncCamera();
   }
 
+  _updateFlight(delta) {
+    const forward = new THREE.Vector3(0, 0, -1).applyEuler(
+      new THREE.Euler(this.pitch, this.yaw, 0, "YXZ")
+    );
+    let boost = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? 48 : 22;
+    if (this.keys.has("KeyW")) this.position.addScaledVector(forward, boost * delta);
+    if (this.keys.has("KeyS")) this.position.addScaledVector(forward, -boost * 0.6 * delta);
+    if (this.keys.has("Space")) this.position.y += 18 * delta;
+    if (this.keys.has("ControlLeft") || this.keys.has("KeyC")) this.position.y -= 18 * delta;
+    this.stats.oxygen -= CONST.O2_IDLE * 0.3 * delta;
+    this.stats.oxygen = Math.max(0, this.stats.oxygen);
+    this.targetFov = 90;
+    this.camera.fov = THREE.MathUtils.damp(this.camera.fov, this.targetFov, 4, delta);
+    this.camera.updateProjectionMatrix();
+    this.camera.position.copy(this.position);
+    this.camera.rotation.order = "YXZ";
+    this.camera.rotation.y = this.yaw;
+    this.camera.rotation.x = this.pitch;
+  }
+
   getBobOffset() {
-    const bobY = Math.sin(this.walkPhase) * 0.06;
-    const bobX = Math.cos(this.walkPhase * 0.5) * 0.03;
-    return new THREE.Vector3(bobX, bobY, 0);
+    if (this.flying) return new THREE.Vector3();
+    return new THREE.Vector3(
+      Math.cos(this.walkPhase * 0.5) * 0.03,
+      Math.sin(this.walkPhase) * 0.06,
+      0
+    );
   }
 
   applyGeneratorO2(amount) {
-    this.stats.oxygen = Math.min(100, this.stats.oxygen + amount);
+    this.stats.oxygen = Math.min(this.o2Capacity, this.stats.oxygen + amount);
+  }
+
+  eat() {
+    this.stats.hunger = Math.min(100, this.stats.hunger + CONST.FOOD_RESTORE);
+  }
+
+  drink() {
+    this.stats.thirst = Math.min(100, this.stats.thirst + CONST.WATER_RESTORE);
   }
 
   spendMining(delta) {
@@ -155,14 +209,11 @@ export class Player {
     const dir = new THREE.Vector3(0, 0, -1)
       .applyEuler(new THREE.Euler(this.pitch, this.yaw, 0, "YXZ"))
       .normalize();
-    const origin = this.camera.position.clone();
-    return { origin, dir, far: length };
+    return { origin: this.camera.position.clone(), dir, far: length };
   }
 
   _syncCamera() {
-    this.camera.position.copy(this.position);
-    const bob = this.getBobOffset();
-    this.camera.position.add(bob);
+    this.camera.position.copy(this.position).add(this.getBobOffset());
     this.camera.rotation.order = "YXZ";
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
