@@ -21,6 +21,9 @@ export const ItemId = {
   O2_GENERATOR: 19,
   SHIP_KIT: 20,
   BUCKET: 21,
+  DIRT: 22,
+  FISH: 23,
+  FISHING_ROD: 24,
 };
 
 export const BuildingId = {
@@ -65,6 +68,9 @@ export const ITEM_NAMES = {
   [ItemId.O2_GENERATOR]: "O₂ генератор",
   [ItemId.SHIP_KIT]: "Набор корабля",
   [ItemId.BUCKET]: "Ведро",
+  [ItemId.DIRT]: "Земля",
+  [ItemId.FISH]: "Рыба",
+  [ItemId.FISHING_ROD]: "Удочка",
 };
 
 export const BUILDING_NAMES = {
@@ -90,12 +96,15 @@ export const ITEM_COLORS = {
   [ItemId.WATER]: 0x4a9eff,
   [ItemId.SEEDS]: 0xc4a035,
   [ItemId.WRECK_PART]: 0x6a7a8a,
+  [ItemId.DIRT]: 0x6b4a2a,
+  [ItemId.FISH]: 0x5a9ec8,
 };
 
 /** Preferred tool + bare-hand multiplier (0–1). With preferred tool = 1.0 */
 export const GATHER_RULES = {
   [ItemId.WOOD]: { tool: ItemId.AXE, bare: 0.65 },
-  [ItemId.CLAY]: { tool: ItemId.SHOVEL, bare: 0.65 },
+  [ItemId.CLAY]: { tool: ItemId.SHOVEL, bare: 0.45 },
+  [ItemId.DIRT]: { tool: ItemId.SHOVEL, bare: 0.55 },
   [ItemId.STONE]: { tool: ItemId.PICKAXE, bare: 0.3 },
   [ItemId.IRON]: { tool: ItemId.PICKAXE, bare: 0.25 },
   [ItemId.COPPER]: { tool: ItemId.PICKAXE, bare: 0.25 },
@@ -103,6 +112,7 @@ export const GATHER_RULES = {
   [ItemId.ORGANIC]: { tool: ItemId.KNIFE, bare: 0.5 },
   [ItemId.FOOD]: { tool: ItemId.KNIFE, bare: 0.4 },
   [ItemId.WATER]: { tool: ItemId.BUCKET, bare: 0 },
+  [ItemId.FISH]: { tool: ItemId.FISHING_ROD, bare: 0 },
   [ItemId.SEEDS]: { tool: -1, bare: 1.0 },
   [ItemId.WRECK_PART]: { tool: -1, bare: 1.0 },
 };
@@ -113,6 +123,7 @@ export const TOOL_ITEMS = new Set([
   ItemId.KNIFE,
   ItemId.PICKAXE,
   ItemId.BUCKET,
+  ItemId.FISHING_ROD,
 ]);
 
 export const CONST = {
@@ -123,10 +134,15 @@ export const CONST = {
   O2_FILLER_RADIUS: 8,
   O2_FILLER_RATE: 18,
   CHUNK_SIZE: 32,
-  CHUNK_RES: 16,
+  CHUNK_RES: 24,
   CHUNK_LOAD_RADIUS: 2,
   TERRAIN_HEIGHT: 10,
   WATER_LEVEL: -1.2,
+  SWIM_SPEED: 3.6,
+  SWIM_SPRINT: 1.35,
+  DIVE_SPEED: 2.8,
+  DIVE_BREATH: 5.5,
+  DIVE_O2_MULT: 2.8,
   PLAYER_SPEED: 5,
   PLAYER_SPRINT: 1.6,
   JUMP: 6.5,
@@ -135,6 +151,7 @@ export const CONST = {
   MINE_RANGE: 4.5,
   MINE_DAMAGE: 22,
   INTERACT_RANGE: 3.5,
+  HANGAR_INTERACT_RANGE: 14,
   O2_IDLE: 0.45,
   O2_MOVE: 1.2,
   O2_MINE: 2.2,
@@ -148,6 +165,17 @@ export const CONST = {
   TANK_BONUS: 40,
   SHIP_PARTS_NEEDED: 8,
   MAX_TANK_LEVEL: 5,
+  /** Atmospheric ship flight */
+  SHIP_ATMO_SPEED: 26,
+  SHIP_ATMO_BOOST: 52,
+  SHIP_ATMO_CLIMB: 16,
+  SHIP_MIN_AGL: 3.5,
+  /** Exit to space when above terrain by this much */
+  SPACE_EXIT_ALTITUDE: 72,
+  /** Or when absolute Y exceeds this */
+  SPACE_EXIT_Y: 95,
+  /** Max AGL to land / exit cockpit with F */
+  SHIP_LAND_AGL: 10,
 };
 
 export const RECIPES = [
@@ -185,6 +213,13 @@ export const RECIPES = [
     outputId: ItemId.BUCKET,
     outputAmount: 1,
     inputs: { [ItemId.WOOD]: 3, [ItemId.CLAY]: 4 },
+  },
+  {
+    id: "fishing_rod",
+    name: "Удочка",
+    outputId: ItemId.FISHING_ROD,
+    outputAmount: 1,
+    inputs: { [ItemId.WOOD]: 4, [ItemId.IRON]: 1 },
   },
   {
     id: "metal_plate",
@@ -247,15 +282,16 @@ export const BUILD_COSTS = {
 
 export const EVA_MESSAGES = {
   start:
-    "Пилот, Aurora разбита. Соберите дерево (E) и сделайте топор. Для воды скрафтите ведро из дерева и глины, экипируйте и наберите из озера/реки/моря.",
+    "Пилот, Aurora разбита. Дерево рубите ЛКМ. Обломки корабля подбирайте клавишей E. Землю и глину копайте лопатой — глина только в отмелях у воды.",
   firstMine: "Ресурсы есть. Крафтите инструменты — с ними добыча быстрее.",
   firstCraft: "Инструмент готов. Экипируйте его в инвентаре (клик по предмету).",
   needBucket: "Чтобы набрать воду, скрафтите ведро (дерево + глина) и экипируйте его в инвентаре.",
+  needRod: "Чтобы ловить рыбу, скрафтите удочку (дерево + железо) и экипируйте её. Рыба плавает в озёрах и реках.",
   firstBuild: "База растёт. Для космолёта нужен ангар из дерева и глины.",
   hangar:
-    "Ангар готов. Соберите обломки Aurora и скрафтите «Набор корабля», затем установите корабль у ангара (E).",
+    "Ангар готов. Соберите обломки Aurora (E) и скрафтите «Набор корабля», затем установите корабль у ангара (E).",
   shipReady:
-    "Корабль собран. Подойдите к нему и нажмите F — выход в космос и новые планеты.",
+    "Корабль собран. Подойдите и нажмите F — полёт над местностью. Наберите высоту, чтобы выйти в космос; F у земли — посадка.",
   newPlanet: "Новая планета. Кислород, еда и вода — ваш лимит выживания. Исследуйте.",
   auroraCore:
     "Ядро Aurora найдено. Продолжайте: инструменты → ангар → корабль → новые миры.",

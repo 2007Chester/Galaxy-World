@@ -99,6 +99,22 @@ function makeToolMesh(itemId) {
     handle.rotation.x = Math.PI / 2;
     handle.position.y = 0.08;
     g.add(body, handle);
+  } else if (itemId === ItemId.FISHING_ROD) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.72, 6), wood);
+    pole.position.set(0.05, 0.28, -0.05);
+    pole.rotation.z = -0.35;
+    pole.rotation.x = 0.2;
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 4), metal);
+    tip.position.set(0.18, 0.58, -0.12);
+    const line = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.003, 0.003, 0.28, 4),
+      new THREE.MeshStandardMaterial({ color: 0xdde8f0, roughness: 0.6 })
+    );
+    line.position.set(0.18, 0.42, -0.12);
+    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.006, 4, 8, Math.PI), metal);
+    hook.position.set(0.18, 0.28, -0.12);
+    hook.rotation.x = Math.PI / 2;
+    g.add(pole, tip, line, hook);
   } else {
     return null;
   }

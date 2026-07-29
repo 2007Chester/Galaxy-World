@@ -10,7 +10,7 @@ export function getResourceTextures() {
 }
 
 function mat(map, opts = {}) {
-  return new THREE.MeshStandardMaterial({
+  const m = new THREE.MeshStandardMaterial({
     map,
     roughness: opts.roughness ?? 0.85,
     metalness: opts.metalness ?? 0.05,
@@ -20,7 +20,14 @@ function mat(map, opts = {}) {
     transparent: opts.transparent ?? false,
     opacity: opts.opacity ?? 1,
     flatShading: opts.flatShading ?? false,
+    envMapIntensity: opts.envMapIntensity ?? 0.55,
   });
+  if (opts.normalMap) {
+    m.normalMap = opts.normalMap;
+    m.normalScale = opts.normalScale ?? new THREE.Vector2(1, 1);
+  }
+  if (opts.roughnessMap) m.roughnessMap = opts.roughnessMap;
+  return m;
 }
 
 function addShadow(mesh) {
@@ -33,14 +40,23 @@ function makeTree(tex) {
   const g = new THREE.Group();
   const trunk = addShadow(
     new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.38, 1.9, 8),
-      mat(tex.bark, { roughness: 0.95, color: 0xffffff })
+      new THREE.CylinderGeometry(0.22, 0.38, 1.9, 10),
+      mat(tex.bark, {
+        roughness: 0.92,
+        color: 0xffffff,
+        normalMap: tex.barkNormal,
+        normalScale: new THREE.Vector2(1.2, 1.2),
+      })
     )
   );
   trunk.position.y = 0.95;
   g.add(trunk);
 
-  const leafMat = mat(tex.leaf, { roughness: 0.8 });
+  const leafMat = mat(tex.leaf, {
+    roughness: 0.72,
+    normalMap: tex.leafNormal,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+  });
   const clusters = [
     [0, 2.35, 0, 0.95],
     [0.45, 2.05, 0.25, 0.7],
@@ -75,8 +91,17 @@ function makeTree(tex) {
 
 function makeClayMound(tex) {
   const g = new THREE.Group();
-  const clayMat = mat(tex.clay, { roughness: 1 });
-  const dirtMat = mat(tex.dirt, { roughness: 1 });
+  const clayMat = mat(tex.clay, {
+    roughness: 0.88,
+    normalMap: tex.clayNormal,
+    roughnessMap: tex.clayRoughness,
+    normalScale: new THREE.Vector2(1.2, 1.2),
+  });
+  const dirtMat = mat(tex.dirt, {
+    roughness: 0.95,
+    normalMap: tex.dirtNormal,
+    roughnessMap: tex.dirtRoughness,
+  });
 
   const base = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), clayMat));
   base.scale.set(1.35, 0.55, 1.15);
@@ -107,7 +132,13 @@ function makeClayMound(tex) {
 
 function makeRock(tex, variant = "stone") {
   const g = new THREE.Group();
-  const rockMat = mat(tex.rock, { roughness: 0.92, flatShading: true });
+  const rockMat = mat(tex.rock, {
+    roughness: 0.88,
+    flatShading: false,
+    normalMap: tex.rockNormal,
+    roughnessMap: tex.rockRoughness,
+    normalScale: new THREE.Vector2(1.3, 1.3),
+  });
   const crystalKey =
     variant === "iron"
       ? "iron"
@@ -117,14 +148,15 @@ function makeRock(tex, variant = "stone") {
           ? "silicon"
           : "stone";
   const crystalMat = mat(tex.crystals[crystalKey], {
-    roughness: 0.35,
-    metalness: variant === "stone" ? 0.15 : 0.45,
+    roughness: 0.28,
+    metalness: variant === "stone" ? 0.2 : 0.55,
     emissive: variant === "silicon" ? 0x114466 : variant === "copper" ? 0x442200 : 0x221100,
-    emissiveIntensity: variant === "stone" ? 0.05 : 0.35,
+    emissiveIntensity: variant === "stone" ? 0.08 : 0.4,
+    envMapIntensity: 1.2,
   });
 
   const main = addShadow(
-    new THREE.Mesh(new THREE.DodecahedronGeometry(0.55, 0), rockMat)
+    new THREE.Mesh(new THREE.DodecahedronGeometry(0.55, 1), rockMat)
   );
   main.position.y = 0.4;
   main.rotation.set(0.3, 0.5, 0.1);
@@ -158,8 +190,16 @@ function makeRock(tex, variant = "stone") {
 
 function makeAnimal(tex) {
   const g = new THREE.Group();
-  const fur = mat(tex.fur, { roughness: 0.9 });
-  const dark = mat(tex.fur, { roughness: 0.95, color: 0x886644 });
+  const fur = mat(tex.fur, {
+    roughness: 0.85,
+    normalMap: tex.furNormal,
+    normalScale: new THREE.Vector2(1.1, 1.1),
+  });
+  const dark = mat(tex.fur, {
+    roughness: 0.9,
+    color: 0x886644,
+    normalMap: tex.furNormal,
+  });
   const legs = [];
 
   const body = addShadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.55, 4, 10), fur));
@@ -222,7 +262,12 @@ function makePond(tex) {
     opacity: 0.82,
     color: 0xaaccff,
   });
-  const rockMat = mat(tex.rock, { roughness: 0.95, flatShading: true });
+  const rockMat = mat(tex.rock, {
+    roughness: 0.9,
+    flatShading: false,
+    normalMap: tex.rockNormal,
+    roughnessMap: tex.rockRoughness,
+  });
 
   const water = addShadow(
     new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.9, 0.12, 16), waterMat)
@@ -250,10 +295,62 @@ function makePond(tex) {
   return g;
 }
 
+function makeFish(tex) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x4a9ec8,
+    roughness: 0.35,
+    metalness: 0.45,
+  });
+  const finMat = new THREE.MeshStandardMaterial({
+    color: 0xe8a040,
+    roughness: 0.5,
+    metalness: 0.2,
+  });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+
+  const body = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), bodyMat));
+  body.scale.set(1.7, 0.7, 0.95);
+  body.position.y = 0.12;
+  g.add(body);
+
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), bodyMat));
+  head.position.set(0.28, 0.12, 0);
+  head.scale.set(1.1, 0.85, 0.9);
+  g.add(head);
+
+  const tail = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.22, 4), finMat));
+  tail.rotation.z = Math.PI / 2;
+  tail.position.set(-0.38, 0.12, 0);
+  g.userData.tail = tail;
+  g.add(tail);
+
+  const dorsal = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 4), finMat));
+  dorsal.position.set(0.02, 0.32, 0);
+  g.add(dorsal);
+
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), eyeMat);
+    eye.position.set(0.32, 0.16, side * 0.1);
+    g.add(eye);
+  }
+
+  g.userData.isFish = true;
+  g.scale.setScalar(1.15);
+  return g;
+}
+
 function makeBush(tex, withSeeds = false) {
   const g = new THREE.Group();
-  const stemMat = mat(tex.bark, { roughness: 1, color: 0x886644 });
-  const leafMat = mat(tex.plant, { roughness: 0.75 });
+  const stemMat = mat(tex.bark, {
+    roughness: 0.95,
+    color: 0x886644,
+    normalMap: tex.barkNormal,
+  });
+  const leafMat = mat(tex.plant, {
+    roughness: 0.7,
+    normalMap: tex.plantNormal,
+  });
 
   for (let i = 0; i < 5; i++) {
     const stem = addShadow(
@@ -270,7 +367,11 @@ function makeBush(tex, withSeeds = false) {
   g.add(bush);
 
   if (withSeeds) {
-    const seedMat = mat(tex.dirt, { roughness: 0.6, color: 0xd4a84b });
+    const seedMat = mat(tex.dirt, {
+      roughness: 0.55,
+      color: 0xd4a84b,
+      normalMap: tex.dirtNormal,
+    });
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       const pod = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), seedMat));
@@ -283,11 +384,15 @@ function makeBush(tex, withSeeds = false) {
 
 function makeOrganic(tex) {
   const g = new THREE.Group();
-  const leafMat = mat(tex.leaf, { roughness: 0.7 });
+  const leafMat = mat(tex.leaf, {
+    roughness: 0.65,
+    normalMap: tex.leafNormal,
+  });
   const glow = mat(tex.crystals.organic, {
-    roughness: 0.4,
+    roughness: 0.32,
     emissive: 0x114422,
-    emissiveIntensity: 0.4,
+    emissiveIntensity: 0.45,
+    envMapIntensity: 1,
   });
 
   const core = addShadow(new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), glow));
@@ -308,13 +413,26 @@ function makeOrganic(tex) {
 
 function makeWreck(tex) {
   const g = new THREE.Group();
-  const metal = mat(tex.metal, { roughness: 0.4, metalness: 0.75 });
-  const dark = mat(tex.metalDark, { roughness: 0.5, metalness: 0.8 });
+  const metal = mat(tex.metal, {
+    roughness: 0.38,
+    metalness: 0.82,
+    normalMap: tex.metalNormal,
+    roughnessMap: tex.metalRoughness,
+    normalScale: new THREE.Vector2(0.9, 0.9),
+    envMapIntensity: 1.1,
+  });
+  const dark = mat(tex.metalDark, {
+    roughness: 0.48,
+    metalness: 0.85,
+    normalMap: tex.metalNormal,
+    roughnessMap: tex.metalRoughness,
+  });
   const glow = mat(tex.metalBlue, {
-    roughness: 0.3,
-    metalness: 0.6,
+    roughness: 0.28,
+    metalness: 0.65,
     emissive: 0x2255aa,
     emissiveIntensity: 0.55,
+    normalMap: tex.metalNormal,
   });
 
   const hull = addShadow(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 0.9), metal));
@@ -371,6 +489,8 @@ export function buildResourceVisual(itemId) {
       return makeRock(tex, "silicon");
     case ItemId.FOOD:
       return makeAnimal(tex);
+    case ItemId.FISH:
+      return makeFish(tex);
     case ItemId.WATER:
       return makePond(tex);
     case ItemId.SEEDS:

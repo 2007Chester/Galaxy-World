@@ -1,5 +1,5 @@
 import { CONST } from "./constants.js";
-import { getHeight, isWaterCell } from "./world.js";
+import { getBiome, getHeight, getSoilType, isWaterCell, Biome } from "./world.js";
 
 const CELL = 6;
 const VIEW_RANGE = 72;
@@ -91,8 +91,22 @@ export class Minimap {
       if (Math.abs(dx) > VIEW_RANGE + CELL || Math.abs(dz) > VIEW_RANGE + CELL) continue;
 
       const h = getHeight(wx, wz, seed);
-      if (isWaterCell(wx, wz, seed)) {
+      const soil = getSoilType(wx, wz, seed);
+      const biome = getBiome(wx, wz, seed);
+      if (soil === "water" || isWaterCell(wx, wz, seed)) {
         ctx.fillStyle = "rgb(40,110,170)";
+      } else if (soil === "clay") {
+        ctx.fillStyle = "rgb(180,110,55)";
+      } else if (biome === Biome.DESERT || soil === "sand") {
+        ctx.fillStyle = "rgb(210,175,95)";
+      } else if (biome === Biome.MOUNTAIN || soil === "rock") {
+        const t = Math.max(0, Math.min(1, (h + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 3)));
+        const g = 90 + Math.floor(t * 80);
+        ctx.fillStyle = `rgb(${g},${g},${g + 8})`;
+      } else if (biome === Biome.FOREST) {
+        ctx.fillStyle = "rgb(35,110,55)";
+      } else if (soil === "dirt") {
+        ctx.fillStyle = "rgb(95,68,38)";
       } else {
         const t = Math.max(0, Math.min(1, (h + CONST.TERRAIN_HEIGHT) / (CONST.TERRAIN_HEIGHT * 2)));
         const g = 70 + Math.floor(t * 50);

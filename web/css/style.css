@@ -53,6 +53,61 @@ html, body, #app {
     radial-gradient(ellipse at center, transparent 35%, rgba(80, 10, 20, 0.65) 100%);
 }
 
+#underwater-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background:
+    radial-gradient(ellipse at center, rgba(20, 80, 120, 0.15) 0%, rgba(8, 40, 70, 0.55) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+  transition: opacity 0.25s ease;
+}
+
+.dive-breath {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(4, 20, 36, 0.65);
+  border: 1px solid rgba(100, 180, 220, 0.35);
+  color: #b8e0f5;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.dive-bar {
+  width: 120px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dive-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #3a9fd8, #7ecfff);
+  transition: transform 0.08s linear;
+}
+
+.dive-breath.low {
+  color: #ffb0a0;
+  border-color: rgba(220, 100, 80, 0.5);
+}
+
+.dive-breath.low .dive-bar i {
+  background: linear-gradient(90deg, #c04030, #f08060);
+}
+
 .hidden { display: none !important; }
 
 /* ——— Title screen (modern game menu) ——— */
@@ -1014,6 +1069,12 @@ html, body, #app {
   letter-spacing: 0.04em;
 }
 
+.panel-sub {
+  margin: -4px 0 10px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
 .slots {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1066,6 +1127,55 @@ button.slot.active,
   background: rgba(61, 139, 253, 0.18);
 }
 
+.build-item.locked {
+  opacity: 0.72;
+  cursor: default;
+  border-color: rgba(120, 90, 70, 0.35);
+  background: rgba(20, 12, 8, 0.35);
+}
+
+.build-item.locked:hover {
+  border-color: rgba(180, 100, 70, 0.45);
+}
+
+.build-badge {
+  float: right;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.build-badge.ready {
+  color: #9dffb0;
+  background: rgba(40, 120, 60, 0.35);
+}
+
+.build-badge.need {
+  color: #ffb090;
+  background: rgba(120, 50, 30, 0.35);
+}
+
+.build-cost .cost-part.ok {
+  color: #9ec9a8;
+}
+
+.build-cost .cost-part.missing {
+  color: #f0a080;
+}
+
+.build-missing {
+  color: #e09070 !important;
+}
+
+.build-empty {
+  margin: 0.35rem 0 0;
+  opacity: 0.75;
+  font-size: 0.92rem;
+}
+
 .recipe, .build-item {
   cursor: pointer;
   margin-bottom: 6px;
@@ -1073,6 +1183,10 @@ button.slot.active,
 
 .recipe:hover, .build-item:hover {
   border-color: rgba(61, 139, 253, 0.5);
+}
+
+.build-item.locked:hover {
+  border-color: rgba(180, 100, 70, 0.45);
 }
 
 #craft-status { color: var(--muted); margin: 8px 0; font-size: 0.85rem; }

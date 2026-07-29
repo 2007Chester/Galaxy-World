@@ -107,8 +107,8 @@ export class Inventory {
         return "tank";
       }
     }
-    if (slot.itemId === ItemId.FOOD) {
-      if (this.removeItem(ItemId.FOOD, 1)) return "food";
+    if (slot.itemId === ItemId.FOOD || slot.itemId === ItemId.FISH) {
+      if (this.removeItem(slot.itemId, 1)) return "food";
     }
     if (slot.itemId === ItemId.WATER) {
       if (this.removeItem(ItemId.WATER, 1)) return "water";

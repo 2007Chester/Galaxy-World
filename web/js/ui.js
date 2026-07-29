@@ -24,6 +24,9 @@ export class UI {
     this.inventorySlots = document.getElementById("inventory-slots");
     this.crosshair = document.getElementById("crosshair");
     this.vignette = document.getElementById("vignette");
+    this.underwaterTint = document.getElementById("underwater-tint");
+    this.diveBreath = document.getElementById("dive-breath");
+    this.diveBarFill = document.getElementById("dive-bar-fill");
     this.toolLabel = document.getElementById("tool-value");
     this.modeLabel = document.getElementById("mode-value");
     this.mineProgress = document.getElementById("mine-progress");
@@ -99,27 +102,45 @@ export class UI {
   _bindBuildings(onSelect, inventory = null) {
     this._buildSelectHandler = onSelect || this._buildSelectHandler;
     this.buildList.innerHTML = "";
-    let visibleIndex = 0;
+    let index = 0;
     Object.entries(BUILDING_NAMES).forEach(([id, name]) => {
       const buildingId = Number(id);
       const cost = BUILD_COSTS[id] || {};
-      // Hangar only appears once the player can afford it
-      if (buildingId === 5) {
-        const canHangar = inventory?.hasItems?.(cost);
-        if (!canHangar) return;
-      }
-      visibleIndex += 1;
-      const costText = Object.entries(cost)
-        .map(([item, amount]) => `${ITEM_NAMES[item]} x${amount}`)
-        .join(", ");
+      index += 1;
+      const canBuild = !!inventory?.hasItems?.(cost);
+
+      const costParts = Object.entries(cost).map(([item, need]) => {
+        const have = inventory?.getCount?.(Number(item)) ?? 0;
+        const ok = have >= need;
+        const label = `${ITEM_NAMES[item]} ${have}/${need}`;
+        return `<span class="cost-part ${ok ? "ok" : "missing"}">${label}</span>`;
+      });
+
+      const missing = Object.entries(cost)
+        .filter(([item, need]) => (inventory?.getCount?.(Number(item)) ?? 0) < need)
+        .map(([item, need]) => {
+          const have = inventory?.getCount?.(Number(item)) ?? 0;
+          return `${ITEM_NAMES[item]} ещё ${need - have}`;
+        });
+
       const el = document.createElement("div");
-      el.className = "build-item";
+      el.className = "build-item" + (canBuild ? "" : " locked");
       el.dataset.id = id;
-      el.innerHTML = `<strong>${visibleIndex}. ${name}</strong><br/><small>${costText}</small>`;
+      el.dataset.canBuild = canBuild ? "1" : "0";
+      el.innerHTML = `
+        <strong>${index}. ${name}</strong>
+        <span class="build-badge ${canBuild ? "ready" : "need"}">${canBuild ? "можно" : "не хватает"}</span>
+        <br/><small class="build-cost">${costParts.join(" · ")}</small>
+        ${
+          canBuild
+            ? ""
+            : `<br/><small class="build-missing">Нужно: ${missing.join(", ")}</small>`
+        }
+      `;
       el.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this._buildSelectHandler?.(buildingId);
+        this._buildSelectHandler?.(buildingId, canBuild);
       });
       this.buildList.appendChild(el);
     });
@@ -137,7 +158,15 @@ export class UI {
   }
 
   getVisibleBuildingIds() {
-    return [...this.buildList.children].map((el) => Number(el.dataset.id));
+    return [...this.buildList.children]
+      .filter((el) => el.dataset.id != null)
+      .map((el) => Number(el.dataset.id));
+  }
+
+  getAffordableBuildingIds() {
+    return [...this.buildList.children]
+      .filter((el) => el.dataset.canBuild === "1")
+      .map((el) => Number(el.dataset.id));
   }
 
   showMenu() {
@@ -148,6 +177,8 @@ export class UI {
     this.buildPanel.classList.add("hidden");
     this.completePanel.classList.add("hidden");
     this.vignette?.classList.add("hidden");
+    this.underwaterTint?.classList.add("hidden");
+    this.diveBreath?.classList.add("hidden");
     this.refreshSaveMenu?.();
   }
 
@@ -177,12 +208,27 @@ export class UI {
     this._toggle(this.buildPanel, force);
     if (!this.buildPanel.classList.contains("hidden")) {
       this.hint.textContent =
-        "Мышь свободна: клик по модулю или 1–8. ЛКМ по миру — поставить. Esc — закрыть";
+        "Выберите модуль — доступные отмечены «можно». Esc — закрыть";
     } else {
       this.hint.textContent =
-        "WASD | Shift бег | E добыча / взаимодействие | F корабль | Esc/M меню | Tab инвентарь | C крафт | B стройка";
+        "WASD | Shift бег | ЛКМ добыча | E подобрать / взаимодействие | F корабль | Esc/M меню | Tab | C крафт | B стройка";
     }
     this.syncPointerLock();
+  }
+
+  setPlaceHint(buildingName) {
+    this.hint.textContent = buildingName
+      ? `Стройка: ${buildingName} — ЛКМ поставить | 1–8 смена | B/Esc отмена`
+      : "WASD | Shift бег | ЛКМ добыча | E подобрать / взаимодействие | F корабль | Esc/M меню | Tab | C крафт | B стройка";
+  }
+
+  setSwimHint(swimming, underwater) {
+    if (this.buildModeOpen()) return;
+    if (swimming) {
+      this.hint.textContent = underwater
+        ? "Нырок: Space вверх | Ctrl глубже | запас воздуха ограничен"
+        : "Плавание: WASD | Space вверх / выход | Ctrl нырнуть | Shift быстрее";
+    }
   }
 
   isOverlayOpen() {
@@ -229,6 +275,23 @@ export class UI {
       this.vignette.style.opacity = String(0.35 + danger);
       this.vignette.classList.toggle("critical", lowO2);
     }
+
+    const underwater = !!meta.underwater;
+    const swimming = !!meta.swimming;
+    this.underwaterTint?.classList.toggle("hidden", !underwater);
+    if (this.diveBreath) {
+      const showBreath = swimming && (underwater || (meta.diveBreath ?? 1) < 0.99);
+      this.diveBreath.classList.toggle("hidden", !showBreath);
+      const t = Math.max(0, Math.min(1, meta.diveBreath ?? 1));
+      if (this.diveBarFill) this.diveBarFill.style.transform = `scaleX(${t})`;
+      this.diveBreath.classList.toggle("low", t < 0.35);
+    }
+    if (swimming && !this.buildModeOpen()) {
+      this.setSwimHint(swimming, underwater);
+    } else if (this._wasSwimming && !swimming && !this.buildModeOpen()) {
+      this.setPlaceHint(null);
+    }
+    this._wasSwimming = swimming;
   }
 
   updateInventory(inventory) {
@@ -261,7 +324,7 @@ export class UI {
         const id = slot.itemId;
         if (TOOL_ITEMS.has(id)) {
           this.hint.textContent = `Клик: экипировать ${ITEM_NAMES[id]}`;
-        } else if (id === ItemId.FOOD || id === ItemId.WATER) {
+        } else if (id === ItemId.FOOD || id === ItemId.FISH || id === ItemId.WATER) {
           this.hint.textContent = `Клик: съесть/выпить ${ITEM_NAMES[id]}`;
         } else if (id === ItemId.O2_TANK) {
           this.hint.textContent = "Клик: улучшить кислородный баллон";
