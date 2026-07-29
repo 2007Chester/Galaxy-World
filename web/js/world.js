@@ -9,6 +9,7 @@ import {
   createSky,
   setSunFromAngles,
 } from "./graphics.js";
+import { buildShipVisual } from "./shipMeshes.js";
 
 function hash2(x, z) {
   const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
@@ -1017,50 +1018,12 @@ export class ChunkWorld {
   }
 
   addShip(position) {
-    const ship = new THREE.Group();
-    const hullMat = new THREE.MeshPhysicalMaterial({
-      color: 0x9aabbc,
-      metalness: 0.85,
-      roughness: 0.28,
-      clearcoat: 0.45,
-      clearcoatRoughness: 0.25,
-      envMapIntensity: 1.2,
-    });
-    const wingMat = new THREE.MeshPhysicalMaterial({
-      color: 0x5c6c7c,
-      metalness: 0.75,
-      roughness: 0.35,
-      clearcoat: 0.3,
-      envMapIntensity: 1.0,
-    });
-    const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x66ddff,
-      metalness: 0.1,
-      roughness: 0.05,
-      transmission: 0.55,
-      thickness: 0.4,
-      transparent: true,
-      opacity: 0.85,
-      emissive: 0x2288aa,
-      emissiveIntensity: 0.35,
-      envMapIntensity: 1.4,
-    });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 4.5), hullMat);
-    body.position.y = 0.6;
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.12, 1.2), wingMat);
-    wing.position.set(0, 0.55, 0.2);
-    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), glassMat);
-    cockpit.position.set(0, 1.0, -1.3);
-    ship.add(body, wing, cockpit);
+    const ship = buildShipVisual();
     ship.position.copy(position);
     ship.position.y = this.surfaceY(position.x, position.z);
     ship.userData = { kind: "ship", ready: true };
     ship.traverse((c) => {
-      if (c.isMesh) {
-        c.userData = ship.userData;
-        c.castShadow = true;
-        c.receiveShadow = true;
-      }
+      if (c.isMesh || c.isLight) c.userData = ship.userData;
     });
     this.group.add(ship);
     this.ships.push(ship);
